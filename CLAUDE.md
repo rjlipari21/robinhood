@@ -28,7 +28,10 @@ for a human. Asking questions in this environment silently ends the run.
 
 ## Strategy — momentum / technicals
 
-Universe: the tickers in `config/watchlist.txt`. Do not trade anything else.
+Universe: the tickers in `config/watchlist.txt`. Do not BUY anything else.
+If you hold a position in a ticker that is no longer on the watchlist, keep
+managing it under the exit rules (stop-loss, take-profit, momentum exit) —
+open no new position in it.
 
 Entry (buy $25 via dollar_amount) when a watchlist ticker shows genuine
 intraday momentum, e.g.:

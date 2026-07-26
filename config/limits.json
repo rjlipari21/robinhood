@@ -1,0 +1,7 @@
+{
+  "account_number": "797887684",
+  "per_trade_usd": 25.0,
+  "daily_buy_usd": 100.0,
+  "allowed_sides": ["buy", "sell"],
+  "allowed_types": ["market", "limit"]
+}

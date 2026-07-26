@@ -1,0 +1,65 @@
+{
+  "enableAllProjectMcpServers": true,
+  "permissions": {
+    "allow": [
+      "Read",
+      "Write(state/**)",
+      "Edit(state/**)",
+      "mcp__robinhood-trading__get_accounts",
+      "mcp__robinhood-trading__get_portfolio",
+      "mcp__robinhood-trading__get_equity_positions",
+      "mcp__robinhood-trading__get_equity_quotes",
+      "mcp__robinhood-trading__get_equity_historicals",
+      "mcp__robinhood-trading__get_equity_technical_indicators",
+      "mcp__robinhood-trading__get_equity_fundamentals",
+      "mcp__robinhood-trading__get_equity_orders",
+      "mcp__robinhood-trading__get_equity_tradability",
+      "mcp__robinhood-trading__get_equity_price_book",
+      "mcp__robinhood-trading__get_equity_tax_lots",
+      "mcp__robinhood-trading__get_index_quotes",
+      "mcp__robinhood-trading__get_indexes",
+      "mcp__robinhood-trading__get_earnings_calendar",
+      "mcp__robinhood-trading__get_earnings_results",
+      "mcp__robinhood-trading__get_pnl_trade_history",
+      "mcp__robinhood-trading__get_realized_pnl",
+      "mcp__robinhood-trading__search",
+      "mcp__robinhood-trading__review_equity_order",
+      "mcp__robinhood-trading__place_equity_order",
+      "mcp__robinhood-trading__cancel_equity_order"
+    ],
+    "deny": [
+      "mcp__robinhood-trading__place_option_order",
+      "mcp__robinhood-trading__review_option_order",
+      "mcp__robinhood-trading__cancel_option_order",
+      "mcp__robinhood-trading__exercise_option",
+      "mcp__robinhood-trading__cancel_option_exercise",
+      "mcp__robinhood-trading__get_option_level_upgrade_info",
+      "WebFetch",
+      "WebSearch"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "mcp__robinhood-trading__place_equity_order",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/hooks/guardrails.py\" pre"
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "mcp__robinhood-trading__place_equity_order",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR/hooks/guardrails.py\" post"
+          }
+        ]
+      }
+    ]
+  }
+}

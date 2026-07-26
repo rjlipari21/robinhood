@@ -1,0 +1,11 @@
+[Unit]
+Description=Run the Robinhood trading agent every 30 minutes on weekdays
+
+[Timer]
+# Fires every 30 min, 13:00–21:30 UTC, Mon–Fri. That over-covers both EST and
+# EDT market hours; run-agent.sh does the precise 9:30–16:00 ET gate itself.
+OnCalendar=Mon..Fri *-*-* 13..21:00,30:00 UTC
+Persistent=false
+
+[Install]
+WantedBy=timers.target

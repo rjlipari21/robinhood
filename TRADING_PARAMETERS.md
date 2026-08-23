@@ -14,11 +14,15 @@ Robinhood's 24 Hour Market where available.
 
 ## Position sizing & limits
 - Account risk capital: full account (~$1,000 starting).
-- Max 3 concurrent positions; max ~$300 (30% of account value) per position.
+- Max 10% of account value in any single stock (~$100 per name at current
+  size); up to 9 concurrent positions.
 - Keep ≥10% of account value in cash at all times.
-- Max 4 new orders per day.
+- Max 50 trades (placed orders) per day.
 - Cash-account discipline: buy only with settled funds (avoid good-faith
-  violations; T+1 settlement).
+  violations; T+1 settlement). NOTE: settlement is the practical cap on
+  daily activity — once settled cash is deployed and sold, those proceeds
+  are not re-spendable until the next day, so realized trade count will
+  usually be well below the 50/day ceiling.
 
 ## Entry (buy the trending low)
 - Uptrending or basing name pulled back to support: hourly RSI ≤ 35,
@@ -42,7 +46,10 @@ Robinhood's 24 Hour Market where available.
   for that run and notify.
 
 ## Cadence & reporting
-- Automated check runs hourly (scheduler minimum). Each run may analyze,
+- Analysis/trade runs self-pace every 15-30 minutes based on volume:
+  ~15 min during high-volume stretches (regular-hours open/close), ~30 min
+  in quiet overnight periods, max hold while the market is fully closed.
+  An hourly scheduled routine acts as backstop. Each run may analyze,
   place, or cancel orders within the limits above.
 - Every placed/filled/cancelled order triggers a push notification to the
   owner's phone. Silent when no action is taken.

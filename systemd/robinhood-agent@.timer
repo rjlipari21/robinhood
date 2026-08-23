@@ -1,10 +1,18 @@
 [Unit]
-Description=Run the Robinhood trading agent for %i every 30 minutes on weekdays
+Description=Run the Robinhood trading agent for %i on the 24 Hour Market cadence
 
 [Timer]
-# Fires every 30 min, 13:00–21:30 UTC, Mon–Fri. That over-covers both EST and
-# EDT market hours; run-agent.sh does the precise 9:30–16:00 ET gate itself.
-OnCalendar=Mon..Fri *-*-* 13..21:00,30:00 UTC
+# TRADING_PARAMETERS.md asks for ~15 min during high-volume regular-hours
+# stretches and ~30 min in quieter overnight periods, with an hourly backstop.
+# Two tiers, both in America/New_York so DST needs no maintenance:
+#   tier 1 — every 15 min, 09:00–16:45 ET Mon–Fri (the regular session)
+#   tier 2 — every 30 min around the clock (overnight 24 Hour Market)
+# Overlapping fires are harmless: systemd will not start a second instance of
+# an already-running oneshot unit. run-agent.sh gates the only fully-closed
+# window (Fri 20:00 ET -> Sun 20:00 ET), so most weekend fires exit in
+# milliseconds without invoking claude.
+OnCalendar=Mon..Fri 09..16:00/15:00 America/New_York
+OnCalendar=*-*-* *:00,30:00 America/New_York
 Persistent=false
 
 [Install]

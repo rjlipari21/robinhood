@@ -2,3 +2,4 @@ state/
 logs/
 .env
 .claude/settings.local.json
+__pycache__/

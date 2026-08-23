@@ -12,11 +12,20 @@ if [[ -f state/HALT ]]; then
   exit 0
 fi
 
-# Market-hours gate, computed in US Eastern (DST-aware via tzdata)
+# Session gate for the 24 Hour Market, computed in US Eastern (DST-aware via
+# tzdata). It opens Sunday 20:00 ET and runs continuously to Friday 20:00 ET;
+# the only fully-closed window is Fri 20:00 -> Sun 20:00. Entries use
+# all_day_hours, so runs are useful overnight — this gate must not narrow to
+# regular hours or the strategy loses most of its fill window.
 dow=$(TZ=America/New_York date +%u)     # 1=Mon … 7=Sun
 hm=$(TZ=America/New_York date +%H%M)
-if (( dow > 5 )) || (( 10#$hm < 930 )) || (( 10#$hm >= 1600 )); then
-  echo "$(date -u +%FT%TZ) outside market hours (ET ${hm}, dow ${dow}) — skipping"
+closed=0
+if   (( dow == 6 )); then closed=1                                   # all Saturday
+elif (( dow == 7 )) && (( 10#$hm < 2000 )); then closed=1            # Sun before 20:00
+elif (( dow == 5 )) && (( 10#$hm >= 2000 )); then closed=1           # Fri after 20:00
+fi
+if (( closed )); then
+  echo "$(date -u +%FT%TZ) market fully closed (ET ${hm}, dow ${dow}) — skipping"
   exit 0
 fi
 

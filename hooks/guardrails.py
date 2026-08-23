@@ -8,6 +8,28 @@ a denied order never reaches Robinhood.
   pre  — validate the order against config/limits.json + today's ledger.
          Exit 2 (with reason on stderr) blocks the tool call.
   post — record the executed order in state/ledger.json.
+
+Derived from TRADING_PARAMETERS.md. This hook runs offline with no broker
+access, so it can only enforce what is visible in the order payload plus the
+local ledger:
+
+  ENFORCED HERE      account, side, order type (limit only), session,
+                     per-order notional cap, $5 price floor, buys-per-day
+                     count, HALT switch.
+
+  AGENT JUDGMENT     position count, cash reserve, circuit breaker, settled
+                     funds, averaging-down limit, all technical criteria,
+                     and — importantly — the instrument-type exclusions.
+                     The universe is now every US-listed common stock, so
+                     nothing here can tell a stock from an ETF, ETP, or
+                     closed-end fund; that screen is the agent's alone.
+                     See CLAUDE.md.
+
+Two deliberate asymmetries, both so an exit is never blocked:
+  * the notional cap applies to BUYS only — a position that has grown past
+    the cap must still be sellable in one order;
+  * the orders-per-day cap counts BUYS only — a protective sell must never
+    be refused because the day's order budget is spent.
 """
 import json
 import os
@@ -47,13 +69,35 @@ def load_ledger():
         return []
 
 
-def todays_buy_total(ledger):
+def order_notional(tool_input):
+    """Dollar value of the order, or None if it cannot be determined.
+
+    Limit orders carry quantity + limit_price; dollar_amount is market-only
+    but is handled so the cap cannot be sidestepped by switching order shape.
+    """
+    raw_dollar = tool_input.get("dollar_amount")
+    if raw_dollar is not None:
+        try:
+            return float(raw_dollar)
+        except (TypeError, ValueError):
+            return None
+    qty = tool_input.get("quantity")
+    price = tool_input.get("limit_price")
+    if qty is None or price is None:
+        return None
+    try:
+        return float(qty) * float(price)
+    except (TypeError, ValueError):
+        return None
+
+
+def todays_buy_count(ledger):
     today = eastern_now().strftime("%Y-%m-%d")
-    total = 0.0
-    for entry in ledger:
-        if entry.get("date_et") == today and entry.get("side") == "buy":
-            total += float(entry.get("dollar_amount") or 0)
-    return total
+    return sum(
+        1
+        for e in ledger
+        if e.get("date_et") == today and e.get("side") == "buy"
+    )
 
 
 def pre(payload):
@@ -74,33 +118,53 @@ def pre(payload):
 
     order_type = tool_input.get("type")
     if order_type not in limits["allowed_types"]:
-        deny(f"order type {order_type!r} not allowed")
+        deny(
+            f"order type {order_type!r} not allowed — "
+            f"allowed: {limits['allowed_types']}"
+        )
 
     mh = tool_input.get("market_hours") or "regular_hours"
-    if mh != "regular_hours":
-        deny(f"market_hours {mh!r} not allowed — regular_hours only")
+    if mh not in limits["allowed_market_hours"]:
+        deny(
+            f"market_hours {mh!r} not allowed — "
+            f"allowed: {limits['allowed_market_hours']}"
+        )
+
+    # Limit orders must carry a price, or the notional cap is unenforceable.
+    if order_type == "limit" and tool_input.get("limit_price") is None:
+        deny("limit order requires limit_price")
 
     if side == "buy":
-        if tool_input.get("quantity") is not None:
-            deny("buys must use dollar_amount, not quantity")
-        raw = tool_input.get("dollar_amount")
+        # Penny-stock floor. Only checkable on the way in: the hook cannot see
+        # the live quote, so it tests the limit price the agent chose.
         try:
-            amount = float(raw)
+            price = float(tool_input.get("limit_price"))
         except (TypeError, ValueError):
-            deny(f"buy requires a numeric dollar_amount, got {raw!r}")
-        if amount <= 0:
-            deny("dollar_amount must be positive")
-        if amount > limits["per_trade_usd"]:
+            price = None
+        if price is not None and price < limits["min_price_usd"]:
             deny(
-                f"${amount:.2f} exceeds the per-trade cap of "
-                f"${limits['per_trade_usd']:.2f}"
+                f"limit_price ${price:.2f} is below the ${limits['min_price_usd']:.2f} "
+                f"minimum — no penny stocks"
             )
-        spent = todays_buy_total(load_ledger())
-        if spent + amount > limits["daily_buy_usd"]:
+
+        notional = order_notional(tool_input)
+        if notional is None:
             deny(
-                f"daily buy cap ${limits['daily_buy_usd']:.2f} would be "
-                f"exceeded (already committed ${spent:.2f} today). "
-                f"No more buys today."
+                "cannot determine order value — a buy needs either "
+                "quantity + limit_price, or dollar_amount"
+            )
+        if notional <= 0:
+            deny(f"order value must be positive, got ${notional:.2f}")
+        if notional > limits["max_position_usd"]:
+            deny(
+                f"${notional:.2f} exceeds the per-position cap of "
+                f"${limits['max_position_usd']:.2f}"
+            )
+        placed = todays_buy_count(load_ledger())
+        if placed + 1 > limits["max_orders_per_day"]:
+            deny(
+                f"daily order cap reached — {placed} buys already placed "
+                f"today, limit is {limits['max_orders_per_day']}"
             )
     sys.exit(0)
 
@@ -115,9 +179,11 @@ def post(payload):
             "symbol": tool_input.get("symbol"),
             "side": tool_input.get("side"),
             "type": tool_input.get("type"),
-            "dollar_amount": tool_input.get("dollar_amount"),
+            "market_hours": tool_input.get("market_hours"),
             "quantity": tool_input.get("quantity"),
             "limit_price": tool_input.get("limit_price"),
+            "dollar_amount": tool_input.get("dollar_amount"),
+            "notional_usd": order_notional(tool_input),
             "ref_id": tool_input.get("ref_id"),
         }
     )

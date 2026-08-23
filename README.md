@@ -20,9 +20,12 @@ systemd timer (every 30 min, weekdays)
             └─ state/journal.md, ledger.json    memory between runs
 ```
 
-- **Strategy:** intraday momentum on the tickers in `config/watchlist.txt`
-  (edit freely). Buys are $25 fractional market orders; stop-loss −3%,
-  take-profit +5%, max 4 positions. Details in `CLAUDE.md`.
+- **Strategy:** swing trading — buy pullbacks, sell into strength. Universe is
+  every US-listed common stock, picked in real time each run (no watchlist);
+  ETFs, funds, and sub-$5 names excluded. Buys are limit orders up to $100 per
+  name, max 9 positions, protective exit −5%, target +3–5%. Owner intent lives
+  in `TRADING_PARAMETERS.md`; the agent's mandate in `CLAUDE.md`; the hard caps
+  in `hooks/guardrails.py`.
 - **Account:** only the agentic-enabled cash account listed in
   `config/limits.json`. Options and all other accounts are blocked.
 
@@ -30,13 +33,47 @@ systemd timer (every 30 min, weekdays)
 
 `hooks/guardrails.py` runs as a Claude Code PreToolUse hook on every
 `place_equity_order` call. An order is **rejected before it reaches
-Robinhood** if it exceeds $25 (buy), would push today's buys past $100,
-targets the wrong account, uses a disallowed order type, or if the kill
-switch is set. Executed orders are recorded in `state/ledger.json`, which is
-what the daily cap is computed from. Edit `config/limits.json` to change caps.
+Robinhood** if the buy exceeds $100, the limit price is under $5, today's
+buy count would pass 50, it targets the wrong account, it is not a limit
+order, it names a session outside `allowed_market_hours`, or the kill switch
+is set. Executed orders land in `state/ledger.json`, which the daily count is
+computed from. Edit `config/limits.json` to change caps.
+
+Notional is computed as `quantity × limit_price`, so the per-position cap
+cannot be sidestepped by switching order shape.
+
+Two caps apply to **buys only**, deliberately, so an exit is never blocked:
+the $100 notional limit and the 50/day count. A position that grows past $100
+must stay sellable in one order, and a protective sell must never be refused
+because the day's order budget is spent.
+
+**What the hook cannot check.** It runs offline with no broker access, so the
+9-position ceiling, the 10% cash reserve, the $850 circuit breaker,
+settled-funds discipline, and — since the universe is now every US-listed
+common stock — the ETF/fund exclusion and liquidity screen are all agent
+judgment. They are stated in `CLAUDE.md`; nothing enforces them mechanically.
 
 **Kill switch:** `touch state/HALT` stops all trading instantly (both the
 runner and the hook check it). `rm state/HALT` resumes.
+
+## Push notifications
+
+`hooks/notify.py` fires as a PostToolUse hook and pushes to your phone via
+[ntfy.sh](https://ntfy.sh) — no account, no API key, stdlib only.
+
+Setup: install the ntfy app (iOS/Android), then subscribe to the topic in
+`NOTIFY_URL` in your `.env`. The topic name is the only secret, so it is long
+and random and never committed. Unset `NOTIFY_URL` to disable notifications.
+
+Covered: **placed** and **cancelled** orders, each driven by the tool call
+itself. **Fills are NOT covered** — a fill happens at the broker minutes or
+hours after the order, so no PostToolUse hook can observe it. Catching fills
+needs a separate poller comparing `get_equity_orders` against the ledger; the
+journal is the record of fills until that exists.
+
+A notification never blocks a trade: every failure path in `notify.py` exits 0,
+so an unreachable endpoint, bad URL, or malformed payload loses the alert and
+leaves the order untouched.
 
 ## Setup on a GCP Linux VM
 
@@ -119,8 +156,9 @@ no file edits. It assumes the repo lives at `~/robinhood`; if it doesn't, edit
   `state/journal.md` — the agent writes a dated entry every run.
 - **Pause:** `touch ~/robinhood/state/HALT` · **Resume:** `rm ~/robinhood/state/HALT`
 - **Stop entirely:** `sudo systemctl disable --now "robinhood-agent@$USER.timer"`
-- **Tune:** edit `config/watchlist.txt`, `config/limits.json`, or the strategy
-  rules in `CLAUDE.md`. Changes take effect next run.
+- **Tune:** edit `TRADING_PARAMETERS.md` (owner intent), then bring
+  `config/limits.json`, `hooks/guardrails.py`, and `CLAUDE.md` into line with
+  it. Changes take effect next run.
 
 ## Notes and caveats
 

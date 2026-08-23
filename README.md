@@ -61,9 +61,26 @@ runner and the hook check it). `rm state/HALT` resumes.
 `hooks/notify.py` fires as a PostToolUse hook and pushes to your phone via
 [ntfy.sh](https://ntfy.sh) — no account, no API key, stdlib only.
 
-Setup: install the ntfy app (iOS/Android), then subscribe to the topic in
-`NOTIFY_URL` in your `.env`. The topic name is the only secret, so it is long
-and random and never committed. Unset `NOTIFY_URL` to disable notifications.
+Setup: install the ntfy app (iOS/Android), then **subscribe to the exact topic
+string** in `NOTIFY_URL` in your `.env`. This is the step that is easy to miss —
+publishing succeeds with HTTP 200 whether or not anything is listening, so a
+topic nobody has subscribed to looks identical to a working setup from the
+sending side. If alerts do not arrive, check the subscription first.
+
+`NOTIFY_TOKEN` is optional: set it to an ntfy access token (`tk_...`) for
+reserved topics or any instance that denies anonymous publishing. Plain
+ntfy.sh topics need no token. Unset `NOTIFY_URL` to disable notifications
+entirely.
+
+To verify from the VM without a phone:
+
+```bash
+set -a; . ./.env; set +a
+curl -s "$NOTIFY_URL/json?poll=1" | tail -3     # messages retained on the topic
+```
+
+An unreserved ntfy.sh topic is readable by anyone who learns the string, which
+is why it is long, random, and lives only in the gitignored `.env`.
 
 Covered: **placed** and **cancelled** orders, each driven by the tool call
 itself. **Fills are NOT covered** — a fill happens at the broker minutes or

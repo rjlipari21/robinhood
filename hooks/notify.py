@@ -29,21 +29,21 @@ ENV_PATH = os.path.join(ROOT, ".env")
 TIMEOUT_SECONDS = 6
 
 
-def notify_url():
-    """NOTIFY_URL from the environment, falling back to parsing .env.
+def env_value(key):
+    """Read `key` from the environment, falling back to parsing .env.
 
     The systemd service loads .env via EnvironmentFile so the variable is
     already present there, but an interactive session has no such loading —
     hence the file fallback.
     """
-    url = os.environ.get("NOTIFY_URL", "").strip()
-    if url:
-        return url
+    value = os.environ.get(key, "").strip()
+    if value:
+        return value
     try:
         with open(ENV_PATH) as f:
             for line in f:
                 line = line.strip()
-                if line.startswith("NOTIFY_URL="):
+                if line.startswith(f"{key}="):
                     return line.split("=", 1)[1].strip().strip("'\"")
     except OSError:
         pass
@@ -107,10 +107,13 @@ def describe(tool_name, tool_input, tool_response):
 
 
 def main():
-    url = notify_url()
+    url = env_value("NOTIFY_URL")
     if not url:
         print("notify: NOTIFY_URL unset — skipping", file=sys.stderr)
         sys.exit(0)
+    # Optional: an ntfy access token, needed for reserved topics or any
+    # instance that denies anonymous publishing.
+    token = env_value("NOTIFY_TOKEN")
 
     try:
         payload = json.load(sys.stdin)
@@ -124,14 +127,17 @@ def main():
     # Broad except on purpose: a missed alert is acceptable, a crashed hook
     # on a live order is not. Anything at all goes to stderr and exits 0.
     try:
+        headers = {
+            "Title": header_safe(title),
+            "Priority": "default",
+            "Tags": "chart_with_upwards_trend",
+        }
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         req = urllib.request.Request(
             url,
             data=body.encode("utf-8"),
-            headers={
-                "Title": header_safe(title),
-                "Priority": "default",
-                "Tags": "chart_with_upwards_trend",
-            },
+            headers=headers,
             method="POST",
         )
         with urllib.request.urlopen(req, timeout=TIMEOUT_SECONDS) as resp:

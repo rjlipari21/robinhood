@@ -3,7 +3,6 @@
   "permissions": {
     "allow": [
       "Read",
-      "Write(state/**)",
       "Edit(state/**)",
       "mcp__robinhood-trading__get_accounts",
       "mcp__robinhood-trading__get_portfolio",
@@ -45,7 +44,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/hooks/guardrails.py\" pre"
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-/home/rjlipari21/robinhood}/hooks/guardrails.py\" pre"
           }
         ]
       }
@@ -56,7 +55,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"$CLAUDE_PROJECT_DIR/hooks/guardrails.py\" post"
+            "command": "python3 \"${CLAUDE_PROJECT_DIR:-/home/rjlipari21/robinhood}/hooks/guardrails.py\" post"
           }
         ]
       }

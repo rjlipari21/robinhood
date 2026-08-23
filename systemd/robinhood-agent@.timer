@@ -1,5 +1,5 @@
 [Unit]
-Description=Run the Robinhood trading agent every 30 minutes on weekdays
+Description=Run the Robinhood trading agent for %i every 30 minutes on weekdays
 
 [Timer]
 # Fires every 30 min, 13:00–21:30 UTC, Mon–Fri. That over-covers both EST and

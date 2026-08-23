@@ -101,26 +101,24 @@ Run this during market hours; outside them it exits with a "skipping" line.
 ### 6. Install the schedule
 
 ```bash
-sudo cp systemd/robinhood-agent.service /etc/systemd/system/robinhood-agent@.service
-sudo cp systemd/robinhood-agent.timer   /etc/systemd/system/robinhood-agent.timer
-# Point the timer's unit at your username:
-sudo sed -i 's/^Description=.*/&/' /etc/systemd/system/robinhood-agent.timer
+sudo cp systemd/robinhood-agent@.service systemd/robinhood-agent@.timer /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable --now robinhood-agent.timer
-systemctl list-timers robinhood-agent.timer
+sudo systemctl enable --now "robinhood-agent@$USER.timer"
+systemctl list-timers "robinhood-agent@$USER.timer"
 ```
 
-The service file is a template (`robinhood-agent@.service`); enable the timer
-to trigger `robinhood-agent@YOURUSER.service` by adding under `[Timer]`:
-`Unit=robinhood-agent@YOURUSER.service` — or simply hardcode `User=` and the
-paths in the service file and drop the `@` template. Either works.
+Both units are templates. The instance name after the `@` is your username,
+which fills in `User=` and the `/home/<user>/robinhood` paths in the service —
+so `robinhood-agent@alice.timer` triggers `robinhood-agent@alice.service` with
+no file edits. It assumes the repo lives at `~/robinhood`; if it doesn't, edit
+`WorkingDirectory=` and `ExecStart=` in the service file.
 
 ## Day-to-day
 
 - **Watch it:** `tail -f ~/robinhood/logs/run-$(date +%F).log` and read
   `state/journal.md` — the agent writes a dated entry every run.
 - **Pause:** `touch ~/robinhood/state/HALT` · **Resume:** `rm ~/robinhood/state/HALT`
-- **Stop entirely:** `sudo systemctl disable --now robinhood-agent.timer`
+- **Stop entirely:** `sudo systemctl disable --now "robinhood-agent@$USER.timer"`
 - **Tune:** edit `config/watchlist.txt`, `config/limits.json`, or the strategy
   rules in `CLAUDE.md`. Changes take effect next run.
 

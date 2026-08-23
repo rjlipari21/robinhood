@@ -6,11 +6,17 @@ swings — accumulate during trending lows, sell into trending highs — using
 Robinhood's 24 Hour Market where available.
 
 ## Universe
-- Liquid, high-volume US equities eligible for the 24 Hour Market
-  (mega/large caps and high-beta names, e.g. NVDA, TSLA, AMD, PLTR, COIN,
-  META, AAPL, MSFT, AMZN, GOOGL, MSTR, SMCI). Chosen per run from
-  technicals; no penny stocks, no leveraged ETFs, no options, no crypto,
-  no margin.
+- ALL US-listed individual common stocks, any industry or market cap —
+  no fixed watchlist. Candidates are selected in real time each run from
+  scanners and technicals (volume/momentum/RSI/range position), buying
+  what looks strongest at that moment.
+- Liquidity floor: price ≥ $5 (no penny stocks) and sufficient average
+  volume for a clean limit fill at the intended size.
+- Exclusions: no ETFs or other funds (ETPs, leveraged/inverse products,
+  closed-end funds), no options, no crypto, no margin.
+- 24 Hour Market eligibility is a bonus, not a requirement: names not
+  eligible for overnight trading are still fair game during regular and
+  extended hours.
 
 ## Position sizing & limits
 - Account risk capital: full account (~$1,000 starting).

@@ -20,8 +20,12 @@ Robinhood's 24 Hour Market where available.
 
 ## Position sizing & limits
 - Account risk capital: full account (~$1,000 starting).
-- Max 10% of account value in any single stock (~$100 per name at current
-  size); up to 9 concurrent positions.
+- Max 50% of account value in any single stock (~$500 per name at current
+  size). With the cash floor below, that means at most 2 max-size
+  positions; smaller sizes may be used to hold more names concurrently
+  (up to 9). Sizing is a ceiling, not a target — take a full 50% only on
+  a high-conviction setup, and prefer smaller when the signal is weak or
+  the spread is wide.
 - Keep ≥10% of account value in cash at all times.
 - Max 50 trades (placed orders) per day.
 - Cash-account discipline: buy only with settled funds (avoid good-faith

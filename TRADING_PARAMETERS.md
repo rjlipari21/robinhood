@@ -95,17 +95,19 @@ instead of only buying weakness.
   5-min bars is not — wait one more 5-min bar for the micro low to hold);
   MACRO trend must not be DOWN-ACCEL.
 
-**Path B — momentum-buy (new: buy strength, not just weakness):**
-- Rung 1 opens when MICRO trend is UP with 5-min RSI in the 45-65 band
-  (confirmed uptrend, not yet overbought) AND price has just closed above
-  its prior 3-bar high on rising volume (a live breakout, not a stale
-  high). This lets the strategy act on names already trending up instead
-  of requiring them to dip first. MACRO trend must not be DOWN-ACCEL.
-- Skip Path B if 5-min RSI ≥ 65 (too extended — wait for either a pullback
-  into Path A range or a fresh breakout) or if MACRO trend is DOWN
-  (non-accelerating DOWN is fine for Path A dip-buys, which are entering
-  at a discount, but not for Path B, which is paying up for strength in a
-  falling context).
+**Path B — momentum-buy (buy strength, not just weakness):**
+- Rung 1 opens when MICRO trend is UP with 5-min RSI in the 45-68 band
+  (confirmed uptrend, not yet overbought — widened from 65 after repeated
+  misses where RSI crossed 65 between 1-minute polls with no bar landing
+  in-window) AND price has just closed above its prior 3-bar high on
+  rising volume (a live breakout, not a stale high). This lets the
+  strategy act on names already trending up instead of requiring them to
+  dip first. MACRO trend must not be DOWN-ACCEL (loosened from a strict
+  "not DOWN" — that gate was blocking most real breakouts, since an
+  ordinary mildly-falling hourly EMA is common even in a healthy tape;
+  DOWN-ACCEL is now the same bar Path A uses).
+- Skip Path B if 5-min RSI ≥ 68 (too extended — wait for either a pullback
+  into Path A range or a fresh breakout).
 
 **Both paths, rungs 2 and 3:**
 - Rung 2 adds as soon as MICRO trend confirms UP: one completed 5-minute

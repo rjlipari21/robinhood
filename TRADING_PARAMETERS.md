@@ -34,43 +34,59 @@ Robinhood's 24 Hour Market where available.
   are not re-spendable until the next day, so realized trade count will
   usually be well below the 50/day ceiling.
 
-## Hourly trend ladder (real-time trend state)
+## Hourly trend ladder, with micro-trend confirmation (real-time trend state)
 
-Every run, recompute each candidate's and each holding's trend state from
-LIVE hourly bars (get_equity_technical_indicators / get_equity_historicals,
-interval=hour). Do not rely on a stored state from a previous run — the
-ladder is re-derived from current data each time.
+Every run, recompute each candidate's and each holding's trend state on TWO
+timeframes from LIVE data (get_equity_technical_indicators /
+get_equity_historicals) — never rely on a stored state from a previous run:
 
-Trend state, from the last 6 completed hourly bars:
-- UP     — higher highs and higher lows, or hourly close above the 20-bar
-           hourly EMA with a rising EMA slope.
+- MACRO trend (context, from the last 6 completed HOURLY bars): sets
+  whether the name is eligible to trade at all.
+- MICRO trend (trigger, from the last 6-8 completed 5-MINUTE bars, extended
+  hours): sets exact timing — when to actually fire the order. Don't wait
+  for an hourly bar to close to confirm what 5-minute bars already show;
+  use minute-level data (1min/5min interval, plus live RSI on the same
+  timeframe) to catch a turn as it happens, the way MET/TAL's RSI cooling
+  from 100→72→63 was tracked intraday rather than waiting for the hour to
+  close.
+
+Trend state (same UP/FLAT/DOWN definition on either timeframe):
+- UP     — higher highs and higher lows, or close above the 20-bar EMA
+           (hourly EMA for macro, 5-min EMA for micro) with a rising slope.
 - FLAT   — neither; chop or a basing range.
-- DOWN   — lower highs and lower lows, or hourly close below a falling
-           20-bar hourly EMA.
+- DOWN   — lower highs and lower lows, or close below a falling 20-bar EMA.
 
 Rung size = 1/3 of the name's intended full position (so 3 rungs reach the
 target; the 50%-of-account cap is the ceiling on the FULL position, not on
 a rung). Never hold more than 3 rungs in one name.
 
 ### Laddering IN (accumulate into trending lows)
-- Rung 1 opens on the dip signal: hourly RSI ≤ 35 or price at the lower end
-  of the 5-10 day range, AND trend state is UP or FLAT (never DOWN — a
-  falling ladder averages into a downtrend).
-- Rung 2 adds only after the hourly trend turns back UP: one completed
-  hourly bar closing above the prior hourly high, and price at/above the
-  rung-1 fill.
-- Rung 3 adds on a second consecutive UP hourly bar, price at/above rung 2.
-- Stop laddering in if trend state prints DOWN, or the name is already at
+- Rung 1 opens on the dip signal — RSI ≤ 35 on the MICRO (5-min) timeframe
+  is enough to trigger, don't wait for the hourly RSI to catch up — price
+  at the lower end of the 5-10 day range also qualifies. Required gate:
+  MACRO trend is UP or FLAT (never DOWN — a falling ladder averages into a
+  downtrend); MICRO trend must not be actively DOWN at the moment of entry
+  (a dip inside chop/basing is fine, a dip still falling on 5-min bars is
+  not — wait one more 5-min bar for the micro low to hold).
+- Rung 2 adds as soon as MICRO trend confirms UP: one completed 5-minute
+  bar closing above its prior 5-minute high, price at/above the rung-1
+  fill. Do not wait for an hourly close — the 5-min confirmation is enough
+  as long as MACRO trend is still UP or FLAT.
+- Rung 3 adds on a second consecutive UP 5-minute bar (or the equivalent
+  hourly confirmation, whichever comes first), price at/above rung 2.
+- Stop laddering in if MACRO trend prints DOWN, or the name is already at
   its cap. Rungs are added on confirmation, never on a further drop.
 
 ### Laddering OUT (distribute into trending highs)
 - Sell one rung at +2% above average cost, a second at +4%, the last at
   +6% — each as a limit order into strength.
 - Accelerate the ladder out (sell the next rung immediately, regardless of
-  the price step) when hourly RSI ≥ 65, or the hourly trend state flips to
-  DOWN while the position is green.
-- Hold the remaining rungs while trend state stays UP — a runner is how the
-  ladder pays for the small losses.
+  the price step) when MICRO (5-min) RSI ≥ 65 — this fires faster than
+  waiting for hourly RSI — or when MACRO trend flips to DOWN while the
+  position is green, or MICRO trend flips DOWN with two consecutive lower
+  5-minute highs (an early warning ahead of the hourly turn).
+- Hold the remaining rungs while MACRO trend state stays UP — a runner is
+  how the ladder pays for the small losses.
 
 ### Protective exit (unchanged, overrides the ladder)
 - Close the ENTIRE position (all rungs at once, not laddered) when it is

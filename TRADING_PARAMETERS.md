@@ -121,9 +121,10 @@ a rung). Never hold more than 3 rungs in one name.
   for that run and notify.
 
 ## Cadence & reporting
-- Analysis/trade runs self-pace every 15-30 minutes based on volume:
-  ~15 min during high-volume stretches (regular-hours open/close), ~30 min
-  in quiet overnight periods, max hold while the market is fully closed.
+- Analysis/trade runs every 1 minute while the market is open (regular and
+  extended hours), to react to micro (5-min) trend/RSI turns as close to
+  live as possible. During fully-closed market hours, fall back to the
+  15-30 min self-paced cadence — there's no new intraday data to react to.
   An hourly scheduled routine acts as backstop. Each run may analyze,
   place, or cancel orders within the limits above.
 - Every placed/filled/cancelled order triggers a push notification to the

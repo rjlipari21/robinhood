@@ -34,20 +34,50 @@ Robinhood's 24 Hour Market where available.
   are not re-spendable until the next day, so realized trade count will
   usually be well below the 50/day ceiling.
 
-## Entry (buy the trending low)
-- Uptrending or basing name pulled back to support: hourly RSI ≤ 35,
-  price near lower end of its 5–10 day range, or a 2%+ dip in a name whose
-  higher-timeframe trend is still up.
-- Limit orders only (marketable limit at/near bid-ask), `all_day_hours`
-  session so entries can fill overnight and pre/post market.
+## Hourly trend ladder (real-time trend state)
 
-## Exit (sell the trending high)
-- Profit target: +3–5% from entry, or hourly RSI ≥ 65 / price at upper end
-  of recent range — sell into strength with a limit order.
-- Protective exit: close any position down ≥5% from entry (stop orders are
-  regular-hours-only, so this is enforced by the hourly check placing a
-  limit sell).
-- No averaging down more than once per position.
+Every run, recompute each candidate's and each holding's trend state from
+LIVE hourly bars (get_equity_technical_indicators / get_equity_historicals,
+interval=hour). Do not rely on a stored state from a previous run — the
+ladder is re-derived from current data each time.
+
+Trend state, from the last 6 completed hourly bars:
+- UP     — higher highs and higher lows, or hourly close above the 20-bar
+           hourly EMA with a rising EMA slope.
+- FLAT   — neither; chop or a basing range.
+- DOWN   — lower highs and lower lows, or hourly close below a falling
+           20-bar hourly EMA.
+
+Rung size = 1/3 of the name's intended full position (so 3 rungs reach the
+target; the 50%-of-account cap is the ceiling on the FULL position, not on
+a rung). Never hold more than 3 rungs in one name.
+
+### Laddering IN (accumulate into trending lows)
+- Rung 1 opens on the dip signal: hourly RSI ≤ 35 or price at the lower end
+  of the 5-10 day range, AND trend state is UP or FLAT (never DOWN — a
+  falling ladder averages into a downtrend).
+- Rung 2 adds only after the hourly trend turns back UP: one completed
+  hourly bar closing above the prior hourly high, and price at/above the
+  rung-1 fill.
+- Rung 3 adds on a second consecutive UP hourly bar, price at/above rung 2.
+- Stop laddering in if trend state prints DOWN, or the name is already at
+  its cap. Rungs are added on confirmation, never on a further drop.
+
+### Laddering OUT (distribute into trending highs)
+- Sell one rung at +2% above average cost, a second at +4%, the last at
+  +6% — each as a limit order into strength.
+- Accelerate the ladder out (sell the next rung immediately, regardless of
+  the price step) when hourly RSI ≥ 65, or the hourly trend state flips to
+  DOWN while the position is green.
+- Hold the remaining rungs while trend state stays UP — a runner is how the
+  ladder pays for the small losses.
+
+### Protective exit (unchanged, overrides the ladder)
+- Close the ENTIRE position (all rungs at once, not laddered) when it is
+  down ≥5% from average cost, or when trend state prints DOWN and the
+  position is red. Stop orders are regular-hours-only, so this is enforced
+  by each run placing a limit sell.
+- No averaging down: a rung is never added below the previous rung's fill.
 
 ## Circuit breakers
 - If total account value falls below $850 (−15%), stop opening new

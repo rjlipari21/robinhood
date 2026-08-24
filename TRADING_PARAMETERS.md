@@ -10,8 +10,14 @@ Robinhood's 24 Hour Market where available.
   no fixed watchlist. Candidates are selected in real time each run from
   scanners and technicals (volume/momentum/RSI/range position), buying
   what looks strongest at that moment.
-- Liquidity floor: price ≥ $5 (no penny stocks) and sufficient average
-  volume for a clean limit fill at the intended size.
+- Liquidity floor: price ≥ $5 (no penny stocks) and average volume
+  ≥ 500K shares/day — enough for a clean limit fill at this account's size.
+  Market cap floor is $300M (not $2B+ large-cap-only) so genuine small/
+  mid-caps down to the $5 price floor are eligible, not just mega-caps.
+  The saved scan returns up to 200 rows sorted by price (high to low); when
+  total matches exceed 200, re-run with a narrower filter (e.g. price
+  BETWEEN $5-$50) to see the lower-priced tail rather than assuming those
+  names were excluded — they're eligible, just off the first page.
 - Exclusions: no ETFs or other funds (ETPs, leveraged/inverse products,
   closed-end funds), no options, no crypto, no margin.
 - 24 Hour Market eligibility is a bonus, not a requirement: names not

@@ -14,10 +14,13 @@ Robinhood's 24 Hour Market where available.
   ≥ 500K shares/day — enough for a clean limit fill at this account's size.
   Market cap floor is $300M (not $2B+ large-cap-only) so genuine small/
   mid-caps down to the $5 price floor are eligible, not just mega-caps.
-  The saved scan returns up to 200 rows sorted by price (high to low); when
-  total matches exceed 200, re-run with a narrower filter (e.g. price
-  BETWEEN $5-$50) to see the lower-priced tail rather than assuming those
-  names were excluded — they're eligible, just off the first page.
+- Scanner coverage: each scan call returns at most 200 rows sorted by price
+  (high to low), so a single broad scan can silently omit the low-priced
+  tail once matches exceed 200. Run BOTH saved scans every pass:
+  - `edb15197-727a-48e5-9119-2a77b280f915` — broad, no price ceiling.
+  - `b440c52a-da3a-403d-9d9c-92bb53ac5322` — low-price band $5-$50,
+    same technical filters, exists specifically to catch names that fall
+    off the broad scan's first page.
 - Exclusions: no ETFs or other funds (ETPs, leveraged/inverse products,
   closed-end funds), no options, no crypto, no margin.
 - 24 Hour Market eligibility is a bonus, not a requirement: names not

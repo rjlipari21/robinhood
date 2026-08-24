@@ -78,15 +78,36 @@ Rung size = 1/3 of the name's intended full position (so 3 rungs reach the
 target; the 50%-of-account cap is the ceiling on the FULL position, not on
 a rung). Never hold more than 3 rungs in one name.
 
-### Laddering IN (accumulate into trending lows)
-- Rung 1 opens on the MICRO dip signal — RSI ≤ 35 on the 5-min timeframe
-  triggers it, don't wait for the hourly RSI to catch up; price at the
-  lower end of the 5-10 day range also qualifies. Required gates: MICRO
-  trend must not be actively DOWN at the moment of entry (a dip inside
-  chop/basing is fine, a dip still falling on 5-min bars is not — wait one
-  more 5-min bar for the micro low to hold); MACRO trend must not be
-  DOWN-ACCEL (an ordinary DOWN or FLAT hourly reading no longer blocks the
-  entry, only an accelerating one does).
+### Laddering IN — two independent entry paths (either one opens rung 1)
+Live 1-minute polling was missing most dips: 5-min RSI mean-reverts fast
+enough that a strict ≤35 read is rarely caught mid-bar, so the account was
+sitting in cash through a grinding-higher tape. Two changes fix this:
+widen the dip trigger, and add a second path that buys confirmed strength
+instead of only buying weakness.
+
+**Path A — dip-buy (unchanged in spirit, wider trigger):**
+- Rung 1 opens on 5-min RSI ≤ 42 (was ≤35 — the tighter threshold was
+  missing dips that bounced between polls), or price at the lower end of
+  the 5-10 day range, or RSI having troughed and turned up within the last
+  2 completed 5-min bars (catches a dip whose exact bottom fell between
+  polls). Required gates: MICRO trend must not be actively DOWN at the
+  moment of entry (a dip inside chop/basing is fine, a dip still falling on
+  5-min bars is not — wait one more 5-min bar for the micro low to hold);
+  MACRO trend must not be DOWN-ACCEL.
+
+**Path B — momentum-buy (new: buy strength, not just weakness):**
+- Rung 1 opens when MICRO trend is UP with 5-min RSI in the 45-65 band
+  (confirmed uptrend, not yet overbought) AND price has just closed above
+  its prior 3-bar high on rising volume (a live breakout, not a stale
+  high). This lets the strategy act on names already trending up instead
+  of requiring them to dip first. MACRO trend must not be DOWN-ACCEL.
+- Skip Path B if 5-min RSI ≥ 65 (too extended — wait for either a pullback
+  into Path A range or a fresh breakout) or if MACRO trend is DOWN
+  (non-accelerating DOWN is fine for Path A dip-buys, which are entering
+  at a discount, but not for Path B, which is paying up for strength in a
+  falling context).
+
+**Both paths, rungs 2 and 3:**
 - Rung 2 adds as soon as MICRO trend confirms UP: one completed 5-minute
   bar closing above its prior 5-minute high, price at/above the rung-1
   fill. Do not wait for an hourly close.
@@ -97,8 +118,10 @@ a rung). Never hold more than 3 rungs in one name.
   drop.
 
 ### Laddering OUT (distribute into trending highs)
-- Sell one rung at +2% above average cost, a second at +4%, the last at
-  +6% — each as a limit order into strength.
+- Sell one rung at +1.5% above average cost, a second at +3%, the last at
+  +5% — each as a limit order into strength (tightened from 2/4/6% so
+  winners round-trip faster and free up settled cash for the next entry,
+  matching the faster 1-minute cadence).
 - Accelerate the ladder out (sell the next rung immediately, regardless of
   the price step) when MICRO (5-min) RSI ≥ 65, or MICRO trend flips DOWN
   with two consecutive lower 5-minute highs — these are the primary exit

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# One scheduled trading run. Safe to invoke any time — exits quietly when the
-# 24 Hour Market is fully closed (Fri 20:00 ET -> Sun 20:00 ET), when a run is
-# already in flight, or when the kill switch is set.
+# One scheduled trading run. Safe to invoke any time — exits quietly outside
+# Robinhood's regular/extended sessions (07:00-20:00 ET, Mon-Fri), when a run
+# is already in flight, or when the kill switch is set.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,7 +14,7 @@ if [[ -f state/HALT ]]; then
   exit 0
 fi
 
-# Overlap guard. The timer fires every 5 minutes but a run can take longer than
+# Overlap guard. The timer fires every 15 minutes but a run can take longer than
 # that, and two agents trading the same account concurrently would double-size
 # positions and race on state/ledger.json. Non-blocking: if the lock is held,
 # this fire is dropped rather than queued behind the run in progress.
@@ -24,20 +24,21 @@ if ! flock -n "$lockfd"; then
   exit 0
 fi
 
-# Session gate for the 24 Hour Market, computed in US Eastern (DST-aware via
-# tzdata). It opens Sunday 20:00 ET and runs continuously to Friday 20:00 ET;
-# the only fully-closed window is Fri 20:00 -> Sun 20:00. Entries use
-# all_day_hours, so runs are useful overnight — this gate must not narrow to
-# regular hours or the strategy loses most of its fill window.
+# Session gate: Robinhood's regular + extended hours only, 07:00-20:00 ET
+# Mon-Fri, computed in US Eastern (DST-aware via tzdata). This is the
+# authoritative check -- the timer is bounded to the same window, but a manual
+# invocation or a Persistent= catch-up can still land outside it.
+#
+# The overnight 24 Hour Market window (20:00-07:00 ET) is deliberately excluded.
+# Consequence to keep in mind: an order tagged all_day_hours placed near the
+# 20:00 close can still fill overnight, and no run will manage the position
+# until 07:00 -- roughly an 11-hour unmonitored window with no protective exit.
 dow=$(TZ=America/New_York date +%u)     # 1=Mon … 7=Sun
 hm=$(TZ=America/New_York date +%H%M)
-closed=0
-if   (( dow == 6 )); then closed=1                                   # all Saturday
-elif (( dow == 7 )) && (( 10#$hm < 2000 )); then closed=1            # Sun before 20:00
-elif (( dow == 5 )) && (( 10#$hm >= 2000 )); then closed=1           # Fri after 20:00
-fi
-if (( closed )); then
-  echo "$(date -u +%FT%TZ) market fully closed (ET ${hm}, dow ${dow}) — skipping"
+open=0
+if (( dow <= 5 )) && (( 10#$hm >= 700 )) && (( 10#$hm < 2000 )); then open=1; fi
+if (( ! open )); then
+  echo "$(date -u +%FT%TZ) outside regular/extended hours (ET ${hm}, dow ${dow}) — skipping"
   exit 0
 fi
 
@@ -47,8 +48,8 @@ LOG="logs/run-$(TZ=America/New_York date +%F).log"
   echo "===== run started $(date -u +%FT%TZ) ====="
   # Model is pinned, not left to the CLI default. Measured against this repo's
   # own session history (95.8% cache reads, 3.3% cache writes, 0.9% output), the
-  # five-minute cadence runs ~30-80M tokens/day; on the Opus default that would
-  # be ~$28-75/day against a ~$1,000 account. Sonnet 5 cuts that ~60-75% again.
+  # 15-minute session-bounded cadence runs ~5-40M tokens/day across ~52 runs; on
+  # the Opus default that would be ~$5-36/day. Sonnet 5 cuts that ~60-75% again.
   #
   # Pinned to an exact ID rather than the 'sonnet' alias: the alias follows the
   # latest release, and a trading system should not change models silently.

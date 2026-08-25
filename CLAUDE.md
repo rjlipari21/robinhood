@@ -34,9 +34,13 @@ Verify these against Robinhood each run — never against the journal alone.
 - **Limit orders only**, both entries and exits. Market and stop orders are
   rejected by the hook. Stop orders are regular-hours-only in any case, which
   is why the protective exit is a limit sell placed by your own check.
-- Sessions: `all_day_hours` (24 Hour Market) for entries so they can fill
-  overnight and pre/post market. `regular_hours` and `extended_hours` are
-  also permitted. Read `config/limits.json` for current values.
+- Sessions: prefer `regular_hours` or `extended_hours`, because you only run
+  07:00–20:00 ET and can only manage a position while you are running.
+  `all_day_hours` is still permitted and is the right choice when you want a
+  24 Hour Market fill you will still be awake to manage — but an
+  `all_day_hours` order left working near the 20:00 close can fill overnight
+  with no protective exit until 07:00. Read `config/limits.json` for the
+  sessions the hook accepts.
 - Always pass a fresh UUID as `ref_id` on each `place_equity_order`; reuse the
   same `ref_id` only when retrying a transient transport failure.
 
@@ -143,16 +147,25 @@ orders. Sitting in cash is an acceptable and common outcome.
 
 ## Cadence
 
-The scheduler wakes you **every 5 minutes** while the 24 Hour Market is open,
-which lines up with the 5-minute bar your entry and exit rules are decided
-on. The market is fully closed from Friday 8:00 PM ET to Sunday 8:00 PM ET —
-during that window do nothing.
+The scheduler wakes you **every 15 minutes during regular and extended hours
+only** — 07:00 to 20:00 ET, Monday to Friday, last run 19:45. You do not run
+overnight, on weekends, or before 07:00.
 
-Most runs should still place nothing. One bar rarely changes the picture: if
-no 5-minute bar has closed since your last run and no held position has hit a
-rung or a protective threshold, say so in one line and exit. A wake-up is not
-a reason to trade — churn at this frequency costs more in spread than the edge
-it chases.
+Two things follow from that, and both matter:
+
+- **You see roughly every third 5-minute bar, not every one.** Your entry and
+  exit rules are written against completed 5-minute bars, so treat each run as
+  reading a gap, not a tick. Check what happened across the whole interval
+  since your last run, not just the latest bar — a rung trigger or a
+  protective threshold may have been crossed in a bar you never saw.
+- **Nothing manages positions between 20:00 and 07:00 ET.** If you tag an
+  order `all_day_hours` late in the session it can fill overnight with no run
+  to protect it for ~11 hours. Prefer `regular_hours` or `extended_hours` for
+  orders placed near the close unless you specifically want an overnight fill,
+  and size accordingly if you do.
+
+Most runs should still place nothing. A wake-up is not a reason to trade —
+when a setup is marginal, skip it.
 
 ## State and journal
 

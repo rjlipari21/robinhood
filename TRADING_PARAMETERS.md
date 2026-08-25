@@ -184,13 +184,21 @@ are for.
   for that run and notify.
 
 ## Cadence & reporting
-- Analysis/trade runs every 5 minutes while the market is open (regular,
-  extended, and overnight), matching the 5-minute bar the entry and exit
-  rules are actually decided on — polling faster than the bar interval
-  mostly re-reads a bar that has not closed yet. During fully-closed market
-  hours (Fri 20:00 ET to Sun 20:00 ET) runs are skipped entirely; there's no
-  new intraday data to react to. Each run may analyze, place, or cancel
-  orders within the limits above.
+- Analysis/trade runs every 15 minutes during Robinhood's regular and
+  extended sessions only — 07:00 to 20:00 ET, Monday to Friday, last run
+  19:45. Roughly 52 runs per trading day. Each run may analyze, place, or
+  cancel orders within the limits above.
+- The overnight 24 Hour Market window (20:00–07:00 ET) is NOT covered. Two
+  consequences to hold in mind:
+  - Entry and exit decisions read completed 5-minute bars, but the agent now
+    only sees them every third bar. A move that starts and reverses inside a
+    15-minute gap is invisible; the widened Path A/B trigger bands are what
+    absorb that.
+  - An order tagged `all_day_hours` placed near the 20:00 close can still
+    fill overnight, and no run will manage the resulting position until
+    07:00 — an unmonitored window of about 11 hours with no protective exit
+    available. Prefer `regular_hours` or `extended_hours` tagging for orders
+    placed late in the session unless an overnight fill is genuinely wanted.
 - Every placed/filled/cancelled order triggers a push notification to the
   owner's phone. Silent when no action is taken.
 

@@ -89,6 +89,22 @@ Because the universe is open, be more sceptical, not less: a scanner hit in
 an unfamiliar name is not the same quality of signal as a pullback in a
 liquid mega-cap. When in doubt, skip it.
 
+**Cap the candidate list at 50 before you analyse anything.** Run both saved
+scans, union the rows, drop duplicates, then rank by **relative volume
+descending** (`Volume / Average volume` — both columns come back in the scan
+rows, so this costs no extra calls), breaking ties on **`% Change`
+descending**. Keep the top 50 and drop the rest for this run.
+
+Only those 50 earn 5-minute historicals, technical indicators, or price-book
+depth checks. Per-name analysis is the expensive part of a run and 50 is
+already far more than the 9-position ceiling can absorb, so there is nothing
+to gain by working through a longer list. Rows you cut are not blacklisted —
+the ranking is recomputed from scratch next run.
+
+Both scans filter to hourly RSI <= 35, so every row is a pullback candidate
+by construction. Relative volume is what separates a real repricing from
+thin drift.
+
 ### Entry — buy the trending low
 
 Buy an uptrending or basing name that has pulled back to support. Any of:
@@ -127,17 +143,16 @@ orders. Sitting in cash is an acceptable and common outcome.
 
 ## Cadence
 
-The scheduler wakes you **every minute** while the 24 Hour Market is open, so
-you can react to micro (5-minute) trend and RSI turns close to live. The
-market is fully closed from Friday 8:00 PM ET to Sunday 8:00 PM ET — during
-that window do nothing.
+The scheduler wakes you **every 5 minutes** while the 24 Hour Market is open,
+which lines up with the 5-minute bar your entry and exit rules are decided
+on. The market is fully closed from Friday 8:00 PM ET to Sunday 8:00 PM ET —
+during that window do nothing.
 
-At this cadence most runs should do nothing. A minute rarely produces new
-information: if no 5-minute bar has closed since your last run and no held
-position has hit a rung or a protective threshold, say so in one line and
-exit. Do not re-scan the universe every minute, and do not treat a wake-up as
-a reason to trade — churn at this frequency costs far more in spread and fees
-than the edge it chases.
+Most runs should still place nothing. One bar rarely changes the picture: if
+no 5-minute bar has closed since your last run and no held position has hit a
+rung or a protective threshold, say so in one line and exit. A wake-up is not
+a reason to trade — churn at this frequency costs more in spread than the edge
+it chases.
 
 ## State and journal
 

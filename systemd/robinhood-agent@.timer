@@ -2,21 +2,21 @@
 Description=Run the Robinhood trading agent for %i on the 24 Hour Market cadence
 
 [Timer]
-# TRADING_PARAMETERS.md asks for a one-minute cadence while the 24 Hour Market
-# is open, to catch micro (5-min) trend and RSI turns close to live. Fire every
-# minute unconditionally and let run-agent.sh decide: it gates the only fully
-# closed window (Fri 20:00 ET -> Sun 20:00 ET), so weekend fires exit in
-# milliseconds without invoking claude.
+# Five-minute cadence while the 24 Hour Market is open. This matches the
+# strategy's own resolution: entries and exits are decided on completed 5-minute
+# bars, so polling faster than the bar interval mostly re-reads a bar that has
+# not closed yet. Fire unconditionally and let run-agent.sh decide -- it gates
+# the only fully closed window (Fri 20:00 ET -> Sun 20:00 ET), so weekend fires
+# exit in milliseconds without invoking claude.
 #
-# COST: this is ~1,440 invocations per market day, roughly 100x the previous
-# 15/30-minute tiers. Each one is a `claude -p` run. Verify actual spend after
-# the first day before leaving it unattended.
+# COST: ~288 invocations per market day, each a `claude -p` run. Verify actual
+# spend after the first day before leaving it unattended.
 #
-# A run that outlives its minute does not stack: run-agent.sh takes a
+# A run that outlives its window does not stack: run-agent.sh takes a
 # non-blocking flock and exits when a run is already in flight. Without that,
 # systemd would queue a follow-up job for every fire and the agent would run
 # back-to-back forever.
-OnCalendar=*-*-* *:*:00
+OnCalendar=*-*-* *:0/5:00
 Persistent=false
 
 [Install]

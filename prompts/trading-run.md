@@ -18,9 +18,19 @@ Execute one scheduled trading run now. Follow the mandate in CLAUDE.md exactly.
 6. Cancel any stale working orders that no longer reflect current conditions
    (`get_equity_orders` for open ones, then `cancel_equity_order`).
 7. Only then look for entries. There is no watchlist — build a candidate list
-   in real time. Use `run_scan` / `get_scans` where available, or `search` plus
-   quotes on names showing volume and momentum, then confirm with
-   historicals/technicals against the entry criteria in CLAUDE.md.
+   in real time:
+   a. `run_scan` on BOTH saved scans
+      (`edb15197-727a-48e5-9119-2a77b280f915` and
+      `b440c52a-da3a-403d-9d9c-92bb53ac5322`), union the rows, drop
+      duplicate tickers.
+   b. Rank that union by relative volume (`Volume / Average volume`, both
+      columns are in the scan rows) descending, tie-broken by `% Change`
+      descending, and **keep only the top 50**. Do this from the scan
+      output alone — no per-name calls yet.
+   c. Only then spend calls: work down the 50 with historicals/technicals
+      against the entry criteria in CLAUDE.md, and stop as soon as you have
+      enough conviction to act or have run out of setups worth taking. You
+      do not have to analyse all 50.
    Before each buy verify:
    - it is a common stock, not an ETF/ETP/closed-end fund — skip if unsure
    - price ≥ $5 and average volume supports a clean fill at your size

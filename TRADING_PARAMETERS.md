@@ -14,13 +14,46 @@ Robinhood's 24 Hour Market where available.
   ≥ 500K shares/day — enough for a clean limit fill at this account's size.
   Market cap floor is $300M (not $2B+ large-cap-only) so genuine small/
   mid-caps down to the $5 price floor are eligible, not just mega-caps.
-- Scanner coverage: each scan call returns at most 200 rows sorted by price
-  (high to low), so a single broad scan can silently omit the low-priced
-  tail once matches exceed 200. Run BOTH saved scans every pass:
-  - `edb15197-727a-48e5-9119-2a77b280f915` — broad, no price ceiling.
+- Scanner coverage: each scan call returns at most 200 rows, so a single
+  broad scan can silently omit part of the field once matches exceed 200.
+  Run BOTH saved scans every pass:
+  - `edb15197-727a-48e5-9119-2a77b280f915` — broad, no price ceiling,
+    sorted `Last desc` (price high to low), so it is the high-priced names
+    that fill the first page and the cheap tail that falls off.
   - `b440c52a-da3a-403d-9d9c-92bb53ac5322` — low-price band $5-$50,
-    same technical filters, exists specifically to catch names that fall
-    off the broad scan's first page.
+    same technical filters, sorted `Market cap desc`, exists specifically
+    to catch names that fall off the broad scan's first page.
+
+### Candidate cap — top 50 by trending strength
+Both scans hard-filter `RSI (14, 1H) <= 35`, so every row they return is
+already a pullback candidate; what distinguishes them is whether the market
+is actually participating in the dip. Rank and cut BEFORE any per-name
+analysis:
+
+1. Take the union of both scans and drop duplicate tickers.
+2. Apply the cheap screens that need no extra calls: `Asset type` is STOCK,
+   `Last` >= $5, `Average volume` >= 500K.
+3. Score each remaining row from columns the scans already return — no extra
+   API calls, since relative volume is `Volume / Average volume` and both
+   are present on both scans:
+   - **primary: relative volume, descending.** A dip on heavy participation
+     is a real repricing; a dip on thin volume is drift.
+   - **tiebreak: `% Change`, descending.** Between two equally busy dips,
+     prefer the one already stabilising over the one still bleeding.
+4. Keep the **top 50** and discard the rest for this run. Only those 50 are
+   eligible for 5-minute historicals, technical indicators, and price-book
+   depth checks.
+
+The cap is a compute and cost bound, not a strategy change: per-name
+analysis is the expensive part of a run, and 50 candidates is far more than
+the 9-position ceiling can absorb. Names cut this run are not blacklisted —
+the ranking is recomputed from scratch every pass.
+
+KNOWN GAP: because both scans filter to hourly RSI <= 35, Path B
+(momentum-buy: MICRO trend UP, 5-min RSI 45-68, breakout on rising volume)
+has no scanner feeding it — a breakout candidate is structurally excluded
+from scan output. Path B currently only fires on names already surfaced for
+another reason. Closing this needs a third saved scan on the Path B band.
 - Exclusions: no ETFs or other funds (ETPs, leveraged/inverse products,
   closed-end funds), no options, no crypto, no margin.
 - 24 Hour Market eligibility is a bonus, not a requirement: names not
@@ -79,11 +112,17 @@ target; the 50%-of-account cap is the ceiling on the FULL position, not on
 a rung). Never hold more than 3 rungs in one name.
 
 ### Laddering IN — two independent entry paths (either one opens rung 1)
-Live 1-minute polling was missing most dips: 5-min RSI mean-reverts fast
-enough that a strict ≤35 read is rarely caught mid-bar, so the account was
-sitting in cash through a grinding-higher tape. Two changes fix this:
-widen the dip trigger, and add a second path that buys confirmed strength
-instead of only buying weakness.
+Background (from the 1-minute-polling era, when this was tuned): polling was
+missing most dips, because 5-min RSI mean-reverts fast enough that a strict
+≤35 read is rarely caught mid-bar, so the account sat in cash through a
+grinding-higher tape. Two changes fixed it: widen the dip trigger, and add a
+second path that buys confirmed strength instead of only buying weakness.
+
+Both widened thresholds still apply at the current 5-minute cadence. Polling
+now lands on bar boundaries, so every completed 5-minute bar is seen exactly
+once instead of being read mid-formation — but an intra-bar extreme that
+reverses before the close is still invisible, which is what the wide bands
+are for.
 
 **Path A — dip-buy (unchanged in spirit, wider trigger):**
 - Rung 1 opens on 5-min RSI ≤ 42 (was ≤35 — the tighter threshold was
@@ -98,7 +137,7 @@ instead of only buying weakness.
 **Path B — momentum-buy (buy strength, not just weakness):**
 - Rung 1 opens when MICRO trend is UP with 5-min RSI in the 45-68 band
   (confirmed uptrend, not yet overbought — widened from 65 after repeated
-  misses where RSI crossed 65 between 1-minute polls with no bar landing
+  misses where RSI crossed 65 between polls with no bar landing
   in-window) AND price has just closed above its prior 3-bar high on
   rising volume (a live breakout, not a stale high). This lets the
   strategy act on names already trending up instead of requiring them to
@@ -122,8 +161,7 @@ instead of only buying weakness.
 ### Laddering OUT (distribute into trending highs)
 - Sell one rung at +1.5% above average cost, a second at +3%, the last at
   +5% — each as a limit order into strength (tightened from 2/4/6% so
-  winners round-trip faster and free up settled cash for the next entry,
-  matching the faster 1-minute cadence).
+  winners round-trip faster and free up settled cash for the next entry).
 - Accelerate the ladder out (sell the next rung immediately, regardless of
   the price step) when MICRO (5-min) RSI ≥ 65, or MICRO trend flips DOWN
   with two consecutive lower 5-minute highs — these are the primary exit
@@ -146,12 +184,13 @@ instead of only buying weakness.
   for that run and notify.
 
 ## Cadence & reporting
-- Analysis/trade runs every 1 minute while the market is open (regular and
-  extended hours), to react to micro (5-min) trend/RSI turns as close to
-  live as possible. During fully-closed market hours, fall back to the
-  15-30 min self-paced cadence — there's no new intraday data to react to.
-  An hourly scheduled routine acts as backstop. Each run may analyze,
-  place, or cancel orders within the limits above.
+- Analysis/trade runs every 5 minutes while the market is open (regular,
+  extended, and overnight), matching the 5-minute bar the entry and exit
+  rules are actually decided on — polling faster than the bar interval
+  mostly re-reads a bar that has not closed yet. During fully-closed market
+  hours (Fri 20:00 ET to Sun 20:00 ET) runs are skipped entirely; there's no
+  new intraday data to react to. Each run may analyze, place, or cancel
+  orders within the limits above.
 - Every placed/filled/cancelled order triggers a push notification to the
   owner's phone. Silent when no action is taken.
 

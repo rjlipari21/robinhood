@@ -275,13 +275,15 @@ This only syncs files — the trading loop is the systemd timer from step 7.
 - **Inference cost is the dominant running expense, not trading fees.**
   Measured across this project's session history — 859 turns, 98.6M tokens —
   usage is 95.8% cache reads, 3.3% cache writes, 0.9% output, with a floor of
-  ~22–25K tokens per turn that grows as history accumulates. At the one-minute
-  cadence that works out to roughly 150–400M tokens/day. `run-agent.sh` pins
-  `claude-sonnet-5` and `--max-turns 30` to hold that down; on an Opus default
-  with 60 turns the same schedule costs several hundred dollars a day, which
-  for a ~$1,000 account exceeds the capital within days. Check actual spend
-  after the first day, and re-check after changing the cadence, the model, or
-  the turn ceiling.
+  ~22–25K tokens per turn that grows as history accumulates. At the
+  five-minute cadence (~288 runs/day) that works out to roughly 30–80M
+  tokens/day. `run-agent.sh` pins `claude-sonnet-5` and `--max-turns 30`, and
+  the top-50 candidate cap bounds the expensive per-name analysis. Cadence is
+  the dominant lever: at one minute the same setup runs ~150–400M tokens/day,
+  and on an Opus default that is several hundred dollars a day — for a ~$1,000
+  account, more than the capital within days. Check actual spend after the
+  first day, and re-check after changing the cadence, the model, the turn
+  ceiling, or the candidate cap.
 - All credentials live in OAuth tokens Claude Code stores on the VM
   (`~/.claude/.credentials.json`) and in the gitignored `.env`. Nothing
   sensitive is committed here.

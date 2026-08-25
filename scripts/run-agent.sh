@@ -14,7 +14,7 @@ if [[ -f state/HALT ]]; then
   exit 0
 fi
 
-# Overlap guard. The timer fires every minute but a run can take longer than
+# Overlap guard. The timer fires every 5 minutes but a run can take longer than
 # that, and two agents trading the same account concurrently would double-size
 # positions and race on state/ledger.json. Non-blocking: if the lock is held,
 # this fire is dropped rather than queued behind the run in progress.
@@ -46,9 +46,9 @@ LOG="logs/run-$(TZ=America/New_York date +%F).log"
 {
   echo "===== run started $(date -u +%FT%TZ) ====="
   # Model is pinned, not left to the CLI default. Measured against this repo's
-  # own session history (95.8% cache reads, 3.3% cache writes, 0.9% output), a
-  # one-minute cadence runs ~150-400M tokens/day; on the Opus default that is
-  # $140-365/day against a ~$1,000 account. Sonnet 5 cuts that ~60-75%.
+  # own session history (95.8% cache reads, 3.3% cache writes, 0.9% output), the
+  # five-minute cadence runs ~30-80M tokens/day; on the Opus default that would
+  # be ~$28-75/day against a ~$1,000 account. Sonnet 5 cuts that ~60-75% again.
   #
   # Pinned to an exact ID rather than the 'sonnet' alias: the alias follows the
   # latest release, and a trading system should not change models silently.

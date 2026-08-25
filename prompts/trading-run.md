@@ -28,7 +28,7 @@ Execute one scheduled trading run now. Follow the mandate in CLAUDE.md exactly.
    - fewer than 9 open positions, and none already in this ticker
    - the buy keeps ≥10% of account value in cash
    - you are spending settled funds, not unsettled proceeds
-   - size so that quantity × limit_price ≤ $100
+   - size so that quantity × limit_price ≤ $500
 8. For each order: `review_equity_order` first, inspect the estimate and any
    alerts, then `place_equity_order` with a fresh UUID ref_id. Tag
    `market_hours` to a session the name is actually eligible for —

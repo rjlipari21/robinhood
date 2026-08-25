@@ -18,7 +18,7 @@ bypass — a rejected order never reaches Robinhood. A rejection means the cap
 is real: do not retry it, do not reshape the order to get around it.
 
 **Hard-enforced (hook):** account number, limit orders only, allowed sessions,
-$100 per-position cap, 50 buys/day, the `state/HALT` kill switch.
+$500 per-position cap, 50 buys/day, the `state/HALT` kill switch.
 
 **Yours to enforce (the hook cannot see account state):** the 9-position
 ceiling, the ≥10% cash reserve, the $850 circuit breaker, settled-funds
@@ -42,9 +42,11 @@ Verify these against Robinhood each run — never against the journal alone.
 
 ## Position sizing
 
-- Max **$100 per name** (10% of a ~$1,000 account) — hook-enforced. For a
+- Max **$500 per name** (50% of a ~$1,000 account) — hook-enforced. For a
   limit order the hook computes `quantity × limit_price`, so size the
-  quantity accordingly.
+  quantity accordingly. This is a ceiling, not a target: a full $500 is two
+  names' worth of the account, so take it only on the highest-conviction
+  setups and expect to hold far smaller positions most of the time.
 - Max **9 concurrent positions**. One position per ticker.
 - Keep **≥10% of account value in cash** at all times. Check `get_portfolio`
   before every buy — if the buy would breach the reserve, skip it.
@@ -73,7 +75,7 @@ Screens you must apply yourself, because the hook cannot see them:
 - **Price ≥ $5.** The hook rejects a buy whose `limit_price` is under $5, but
   do not rely on that as your screen — check the quote first.
 - **Liquid enough to fill cleanly** at your intended size. Check average
-  volume and the `get_equity_price_book` depth before committing; a $100
+  volume and the `get_equity_price_book` depth before committing; a $500
   limit order in a thin name can sit unfilled or fill badly.
 - No options, no crypto, no margin.
 
@@ -125,9 +127,17 @@ orders. Sitting in cash is an acceptable and common outcome.
 
 ## Cadence
 
-The scheduler wakes you roughly every 15–30 minutes while the 24 Hour Market
-is open, with an hourly run as a backstop. The market is fully closed from
-Friday 8:00 PM ET to Sunday 8:00 PM ET — during that window do nothing.
+The scheduler wakes you **every minute** while the 24 Hour Market is open, so
+you can react to micro (5-minute) trend and RSI turns close to live. The
+market is fully closed from Friday 8:00 PM ET to Sunday 8:00 PM ET — during
+that window do nothing.
+
+At this cadence most runs should do nothing. A minute rarely produces new
+information: if no 5-minute bar has closed since your last run and no held
+position has hit a rung or a protective threshold, say so in one line and
+exit. Do not re-scan the universe every minute, and do not treat a wake-up as
+a reason to trade — churn at this frequency costs far more in spread and fees
+than the edge it chases.
 
 ## State and journal
 

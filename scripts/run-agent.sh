@@ -1,14 +1,26 @@
 #!/usr/bin/env bash
-# One scheduled trading run. Safe to invoke any time — exits quietly outside
-# US market hours (9:30–16:00 ET, Mon–Fri) or when the kill switch is set.
+# One scheduled trading run. Safe to invoke any time — exits quietly when the
+# 24 Hour Market is fully closed (Fri 20:00 ET -> Sun 20:00 ET), when a run is
+# already in flight, or when the kill switch is set.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO_DIR"
+mkdir -p logs state
 
 # Kill switch
 if [[ -f state/HALT ]]; then
   echo "$(date -u +%FT%TZ) HALT present — skipping run"
+  exit 0
+fi
+
+# Overlap guard. The timer fires every minute but a run can take longer than
+# that, and two agents trading the same account concurrently would double-size
+# positions and race on state/ledger.json. Non-blocking: if the lock is held,
+# this fire is dropped rather than queued behind the run in progress.
+exec {lockfd}<>state/.agent-run.lock
+if ! flock -n "$lockfd"; then
+  echo "$(date -u +%FT%TZ) previous run still in flight — skipping"
   exit 0
 fi
 
@@ -29,7 +41,6 @@ if (( closed )); then
   exit 0
 fi
 
-mkdir -p logs state
 LOG="logs/run-$(TZ=America/New_York date +%F).log"
 
 {

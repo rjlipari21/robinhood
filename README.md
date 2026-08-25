@@ -276,14 +276,22 @@ This only syncs files — the trading loop is the systemd timer from step 7.
   Measured across this project's session history — 859 turns, 98.6M tokens —
   usage is 95.8% cache reads, 3.3% cache writes, 0.9% output, with a floor of
   ~22–25K tokens per turn that grows as history accumulates. At the 15-minute
-  session-bounded cadence (~52 runs/day) that works out to roughly 5–40M
-  tokens/day. `run-agent.sh` pins `claude-sonnet-5` and `--max-turns 30`, and
-  the top-50 candidate cap bounds the expensive per-name analysis. Cadence is
-  by far the dominant lever — the same setup at one minute across the 24 Hour
-  Market runs ~150–400M tokens/day, and on an Opus default that is several
-  hundred dollars a day, more than a ~$1,000 account's capital within days.
-  Check actual spend after the first day, and re-check after changing the
-  cadence, the model, the turn ceiling, or the candidate cap.
+  session-bounded cadence (~52 runs/day) that works out to roughly **45–95M
+  tokens/day, about $16–35/day** on `claude-sonnet-5` (rising to $25–52 when
+  its introductory pricing ends). `run-agent.sh` pins the model and
+  `--max-turns 30`; the top-50 candidate cap bounds per-name analysis.
+- **Scan ingestion, not turn count, is the dominant cost term.** The two saved
+  scans total ~36K tokens per run (broad 200 rows ≈ 21K, low-price 121 rows ≈
+  15K), measured live. They stay in context for the remainder of the run, so a
+  25-turn run re-reads them ~25 times as cache reads — roughly three quarters
+  of a run's tokens. Dropping scan columns that the ranking does not use
+  (`Name`, `Net change`, plus `Market cap` and `Asset type`, which the scan's
+  own filters already guarantee) via `update_scan_config` cuts spend faster
+  than lowering the cadence. The top-50 cap reduces *downstream* per-name
+  calls; it does not reduce scan ingestion, because both scans are fetched in
+  full before ranking.
+- Check actual spend after the first day, and re-check after changing the
+  cadence, the model, the turn ceiling, the candidate cap, or scan columns.
 - All credentials live in OAuth tokens Claude Code stores on the VM
   (`~/.claude/.credentials.json`) and in the gitignored `.env`. Nothing
   sensitive is committed here.

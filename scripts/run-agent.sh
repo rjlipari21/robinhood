@@ -47,9 +47,15 @@ LOG="logs/run-$(TZ=America/New_York date +%F).log"
 {
   echo "===== run started $(date -u +%FT%TZ) ====="
   # Model is pinned, not left to the CLI default. Measured against this repo's
-  # own session history (95.8% cache reads, 3.3% cache writes, 0.9% output), the
-  # 15-minute session-bounded cadence runs ~5-40M tokens/day across ~52 runs; on
-  # the Opus default that would be ~$5-36/day. Sonnet 5 cuts that ~60-75% again.
+  # own session history (95.8% cache reads, 3.3% cache writes, 0.9% output) plus
+  # the live scan payloads, the 15-minute session-bounded cadence runs ~45-95M
+  # tokens/day across ~52 runs -- about $16-35/day on Sonnet 5, $25-52 once its
+  # intro pricing ends. The Opus default would be roughly 3x that.
+  #
+  # The dominant term is scan ingestion, not turn count: both saved scans total
+  # ~36K tokens (broad 200 rows ~21K, low-price 121 rows ~15K) and they sit in
+  # context for the rest of the run, so a 25-turn run re-reads them ~25 times as
+  # cache reads. Trimming scan columns cuts cost faster than trimming cadence.
   #
   # Pinned to an exact ID rather than the 'sonnet' alias: the alias follows the
   # latest release, and a trading system should not change models silently.

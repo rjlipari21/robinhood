@@ -1,0 +1,19 @@
+[Unit]
+Description=Robinhood autonomous trading agent for %i (single run)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+# %i is the instance name — enable as robinhood-agent@YOURUSER.timer and it
+# fills in the user and home directory below. Assumes the repo is at ~/robinhood.
+User=%i
+WorkingDirectory=/home/%i/robinhood
+ExecStart=/home/%i/robinhood/scripts/run-agent.sh
+# API key auth (skip if you used `claude setup-token` interactively instead):
+EnvironmentFile=-/home/%i/robinhood/.env
+# The native `claude` installer lands in ~/.local/bin, which systemd's default
+# PATH omits and ~/.profile isn't sourced to add. Listed after EnvironmentFile
+# so this PATH wins even if .env sets one.
+Environment=PATH=/home/%i/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+TimeoutStartSec=25min

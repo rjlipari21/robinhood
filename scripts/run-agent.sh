@@ -45,8 +45,27 @@ LOG="logs/run-$(TZ=America/New_York date +%F).log"
 
 {
   echo "===== run started $(date -u +%FT%TZ) ====="
+  # Model is pinned, not left to the CLI default. Measured against this repo's
+  # own session history (95.8% cache reads, 3.3% cache writes, 0.9% output), a
+  # one-minute cadence runs ~150-400M tokens/day; on the Opus default that is
+  # $140-365/day against a ~$1,000 account. Sonnet 5 cuts that ~60-75%.
+  #
+  # Pinned to an exact ID rather than the 'sonnet' alias: the alias follows the
+  # latest release, and a trading system should not change models silently.
+  #
+  # Haiku 4.5 would be cheaper again, but its 200K context is a real ceiling
+  # here -- a heavy run stacks scan output (up to 200 rows) plus per-candidate
+  # technicals across 30 turns, and truncating a run mid-decision is worse than
+  # the price difference. Sonnet 5 has the full 1M window.
+  #
+  # 30 turns, down from 60: a normal run is journal read + scan + technicals on
+  # a handful of names + review/place pairs + journal write, which lands around
+  # 20-25. The old ceiling mostly bounded runaway runs, and each extra turn
+  # re-reads the whole history. Truncation loses the journal narrative, not the
+  # order record -- the PostToolUse hook writes state/ledger.json, not the agent.
   claude -p "$(cat prompts/trading-run.md)" \
     --output-format text \
-    --max-turns 60
+    --model claude-sonnet-5 \
+    --max-turns 30
   echo "===== run finished $(date -u +%FT%TZ) ====="
 } >> "$LOG" 2>&1

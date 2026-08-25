@@ -272,9 +272,16 @@ This only syncs files — the trading loop is the systemd timer from step 7.
 - Cash account: the mandate forbids same-day round trips (except stop-losses)
   to avoid good-faith violations, and unsettled funds (T+1) naturally limit
   re-use of proceeds.
-- Each run costs API/subscription tokens. Cost scales linearly with the
-  cadence in `systemd/robinhood-agent@.timer` — check your Claude usage after
-  the first day before raising it.
+- **Inference cost is the dominant running expense, not trading fees.**
+  Measured across this project's session history — 859 turns, 98.6M tokens —
+  usage is 95.8% cache reads, 3.3% cache writes, 0.9% output, with a floor of
+  ~22–25K tokens per turn that grows as history accumulates. At the one-minute
+  cadence that works out to roughly 150–400M tokens/day. `run-agent.sh` pins
+  `claude-sonnet-5` and `--max-turns 30` to hold that down; on an Opus default
+  with 60 turns the same schedule costs several hundred dollars a day, which
+  for a ~$1,000 account exceeds the capital within days. Check actual spend
+  after the first day, and re-check after changing the cadence, the model, or
+  the turn ceiling.
 - All credentials live in OAuth tokens Claude Code stores on the VM
   (`~/.claude/.credentials.json`) and in the gitignored `.env`. Nothing
   sensitive is committed here.

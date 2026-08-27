@@ -2,8 +2,10 @@
 
 Authorized by account owner on 2026-08-23 for autonomous trading on the
 "Agentic" account (••••7684). Strategy: capture intraday/multi-day price
-swings — accumulate during trending lows, sell into trending highs — using
-Robinhood's 24 Hour Market where available.
+swings — accumulate during trending lows, sell into trending highs — trading
+Robinhood's regular and extended sessions only. The 24 Hour Market is not
+used: as of 2026-08-27 the owner directed that the agent trade only regular
+and extended hours, so `all_day_hours` is disallowed at the guardrail level.
 
 ## Universe
 - ALL US-listed individual common stocks, any industry or market cap —
@@ -56,9 +58,10 @@ from scan output. Path B currently only fires on names already surfaced for
 another reason. Closing this needs a third saved scan on the Path B band.
 - Exclusions: no ETFs or other funds (ETPs, leveraged/inverse products,
   closed-end funds), no options, no crypto, no margin.
-- 24 Hour Market eligibility is a bonus, not a requirement: names not
-  eligible for overnight trading are still fair game during regular and
-  extended hours.
+- 24 Hour Market eligibility is not considered: since orders are never
+  tagged `all_day_hours`, overnight-eligible names have no advantage. What
+  matters is that a candidate is tradable in the session being used —
+  `regular_hours`, or `extended_hours` when placing pre-/post-market.
 
 ## Position sizing & limits
 - Account risk capital: full account (~$1,000 starting).
@@ -188,17 +191,17 @@ are for.
   extended sessions only — 07:00 to 20:00 ET, Monday to Friday, last run
   19:45. Roughly 52 runs per trading day. Each run may analyze, place, or
   cancel orders within the limits above.
-- The overnight 24 Hour Market window (20:00–07:00 ET) is NOT covered. Two
-  consequences to hold in mind:
+- The overnight 24 Hour Market window (20:00–07:00 ET) is NOT covered, and as
+  of 2026-08-27 is not traded at all. Two consequences to hold in mind:
   - Entry and exit decisions read completed 5-minute bars, but the agent now
     only sees them every third bar. A move that starts and reverses inside a
     15-minute gap is invisible; the widened Path A/B trigger bands are what
     absorb that.
-  - An order tagged `all_day_hours` placed near the 20:00 close can still
-    fill overnight, and no run will manage the resulting position until
-    07:00 — an unmonitored window of about 11 hours with no protective exit
-    available. Prefer `regular_hours` or `extended_hours` tagging for orders
-    placed late in the session unless an overnight fill is genuinely wanted.
+  - `all_day_hours` is rejected by `hooks/guardrails.py`, so no order can fill
+    inside the unmonitored window. Overnight gap risk on positions already
+    held remains and is accepted; the fill-while-unattended risk is removed.
+    An order still working at 20:00 does not fill overnight — verify carryover
+    with `get_equity_orders` at the start of the next run.
 - Every placed/filled/cancelled order triggers a push notification to the
   owner's phone. Silent when no action is taken.
 

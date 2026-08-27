@@ -29,10 +29,12 @@ fi
 # authoritative check -- the timer is bounded to the same window, but a manual
 # invocation or a Persistent= catch-up can still land outside it.
 #
-# The overnight 24 Hour Market window (20:00-07:00 ET) is deliberately excluded.
-# Consequence to keep in mind: an order tagged all_day_hours placed near the
-# 20:00 close can still fill overnight, and no run will manage the position
-# until 07:00 -- roughly an 11-hour unmonitored window with no protective exit.
+# The overnight 24 Hour Market window (20:00-07:00 ET) is deliberately excluded,
+# and since 2026-08-27 it is not traded at all: config/limits.json drops
+# all_day_hours from allowed_market_hours, so the guardrail rejects any order
+# that could fill inside the unmonitored window. Without that, an order tagged
+# all_day_hours near the 20:00 close could fill at 03:00 and sit unmanaged with
+# no protective exit until 07:00.
 dow=$(TZ=America/New_York date +%u)     # 1=Mon … 7=Sun
 hm=$(TZ=America/New_York date +%H%M)
 open=0

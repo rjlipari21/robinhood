@@ -14,7 +14,6 @@
     "limit"
   ],
   "allowed_market_hours": [
-    "all_day_hours",
     "extended_hours",
     "regular_hours"
   ]

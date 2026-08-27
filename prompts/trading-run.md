@@ -41,9 +41,10 @@ Execute one scheduled trading run now. Follow the mandate in CLAUDE.md exactly.
    - size so that quantity × limit_price ≤ $500
 8. For each order: `review_equity_order` first, inspect the estimate and any
    alerts, then `place_equity_order` with a fresh UUID ref_id. Tag
-   `market_hours` to a session the name is actually eligible for —
-   `all_day_hours` for 24 Hour Market names, otherwise `regular_hours` or
-   `extended_hours`. Afterwards confirm via `get_equity_orders` that it was
+   `market_hours` to a session the name is actually eligible for:
+   `regular_hours`, or `extended_hours` when running pre-/post-market.
+   `all_day_hours` is rejected by the guardrail — the 24 Hour Market is not
+   traded. Afterwards confirm via `get_equity_orders` that it was
    accepted. A guardrail rejection is final — do not retry or reshape the
    order.
 9. Append a complete journal entry to `state/journal.md` (date/time ET,

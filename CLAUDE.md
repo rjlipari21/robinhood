@@ -34,12 +34,12 @@ Verify these against Robinhood each run — never against the journal alone.
 - **Limit orders only**, both entries and exits. Market and stop orders are
   rejected by the hook. Stop orders are regular-hours-only in any case, which
   is why the protective exit is a limit sell placed by your own check.
-- Sessions: prefer `regular_hours` or `extended_hours`, because you only run
-  07:00–20:00 ET and can only manage a position while you are running.
-  `all_day_hours` is still permitted and is the right choice when you want a
-  24 Hour Market fill you will still be awake to manage — but an
-  `all_day_hours` order left working near the 20:00 close can fill overnight
-  with no protective exit until 07:00. Read `config/limits.json` for the
+- Sessions: `regular_hours` or `extended_hours` only. `all_day_hours` (the 24
+  Hour Market) is rejected by the hook. The reason is the run window: you only
+  run 07:00–20:00 ET and can only manage a position while you are running, so
+  an overnight-eligible order left working near the 20:00 close could fill with
+  no protective exit until 07:00. Every order you place must be one that can
+  only fill while a run is awake to manage it. Read `config/limits.json` for the
   sessions the hook accepts.
 - Always pass a fresh UUID as `ref_id` on each `place_equity_order`; reuse the
   same `ref_id` only when retrying a transient transport failure.
@@ -83,11 +83,11 @@ Screens you must apply yourself, because the hook cannot see them:
   limit order in a thin name can sit unfilled or fill badly.
 - No options, no crypto, no margin.
 
-24 Hour Market eligibility is a bonus, not a requirement. Names that trade
-overnight can be entered with `all_day_hours`; names that do not are still
-fair game during regular and extended hours — check
-`get_equity_tradability` for per-session eligibility before choosing the
-session on the order.
+24 Hour Market eligibility is irrelevant here — you never tag an order
+`all_day_hours`, so a name that trades overnight has no advantage over one
+that does not. What you do need is eligibility for the session you are
+actually tagging: check `get_equity_tradability` and confirm the name trades
+`regular_hours`, or `extended_hours` if that is when you are placing.
 
 Because the universe is open, be more sceptical, not less: a scanner hit in
 an unfamiliar name is not the same quality of signal as a pullback in a
@@ -123,7 +123,9 @@ a name making successive lower closes may still be falling, not basing. When a
 setup is marginal, skip it.
 
 Place a marketable limit at or near the bid-ask, `market_hours:
-all_day_hours`.
+regular_hours` — or `extended_hours` when you are running pre- or post-market
+and the name is eligible for that session. Note that extended-hours books are
+thinner, so widen your read of the price book before leaning on a fill there.
 
 ### Exit — sell the trending high
 
@@ -158,11 +160,14 @@ Two things follow from that, and both matter:
   reading a gap, not a tick. Check what happened across the whole interval
   since your last run, not just the latest bar — a rung trigger or a
   protective threshold may have been crossed in a bar you never saw.
-- **Nothing manages positions between 20:00 and 07:00 ET.** If you tag an
-  order `all_day_hours` late in the session it can fill overnight with no run
-  to protect it for ~11 hours. Prefer `regular_hours` or `extended_hours` for
-  orders placed near the close unless you specifically want an overnight fill,
-  and size accordingly if you do.
+- **Nothing manages positions between 20:00 and 07:00 ET.** This is why
+  `all_day_hours` is disallowed: no order you place should be able to fill
+  during those ~11 unmonitored hours. Positions you already hold still gap
+  overnight — that risk you cannot avoid — but a working order that fills at
+  03:00 with no protective exit for four hours is risk you chose, so the hook
+  removes the option. Any order still working at 20:00 simply expires or sits
+  until the next session; check `get_equity_orders` at the start of each run
+  for what carried over.
 
 Most runs should still place nothing. A wake-up is not a reason to trade —
 when a setup is marginal, skip it.

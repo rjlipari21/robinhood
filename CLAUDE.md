@@ -186,10 +186,20 @@ when a setup is marginal, skip it.
 ## Notifications
 
 Placing or cancelling an order automatically pushes a notification to the
-owner's phone — you do not need to do anything to trigger it. **Fills are not
-notified**, because nothing can observe a fill at the moment you place the
-order. That makes the journal the only record of what actually filled: when
-you confirm fills via `get_equity_orders`, write them down explicitly.
+owner's phone — you do not need to do anything to trigger it.
+
+**Fills are different and they need you.** Nothing can observe a fill at the
+moment you place the order, so fill alerts are driven off `state/fills.jsonl`:
+when you reconcile `get_equity_orders` each run, append one JSON line per
+newly-filled order (see step 9 of the run prompt). `run-agent.sh` drains that
+file to the owner's phone after you exit, deduped by `order_id`, so appending a
+line is all you do — never send anything yourself, and never re-add an
+order_id that is already in the file.
+
+If you skip that append, the owner gets no alert that a trade actually
+happened. A placed order is not a trade; the fill is. Keep writing fills into
+`state/journal.md` as well — the journal is the durable narrative, while
+`fills.jsonl` is only the alert queue.
 
 ## Honesty
 

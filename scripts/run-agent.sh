@@ -82,9 +82,25 @@ LOG="logs/run-$(TZ=America/New_York date +%F).log"
   # only place fills, reasoning, and next-run watch items are recorded, and it
   # is written last. Losing it is worse than the cost of the extra turns, so
   # this ceiling should bound runaway runs only, not normal busy ones.
+  # `|| rc=$?` rather than a bare call: set -e is on, so an agent crash or a
+  # non-zero exit would otherwise abort the script here and skip the fill drain
+  # below -- exactly the run where a recorded fill most needs reporting.
+  rc=0
   claude -p "$(cat prompts/trading-run.md)" \
     --output-format text \
     --model claude-sonnet-5 \
-    --max-turns 45
-  echo "===== run finished $(date -u +%FT%TZ) ====="
+    --max-turns 45 || rc=$?
+
+  # Fill alerts. The agent reconciles get_equity_orders every run and appends
+  # each newly-observed fill to state/fills.jsonl; this drains that into ntfy.
+  #
+  # Deliberately OUTSIDE the claude call and after it, so a run that dies or
+  # truncates still gets its already-recorded fills reported. Dedupe is by
+  # order_id in state/fills-notified.json, so running it every time is safe.
+  #
+  # `|| true` because an alerting failure must never fail a trading run --
+  # notify.py already exits 0 on every internal error, this covers the rest.
+  python3 hooks/notify.py fills || true
+
+  echo "===== run finished $(date -u +%FT%TZ) rc=$rc ====="
 } >> "$LOG" 2>&1

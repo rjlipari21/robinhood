@@ -47,7 +47,16 @@ Execute one scheduled trading run now. Follow the mandate in CLAUDE.md exactly.
    traded. Afterwards confirm via `get_equity_orders` that it was
    accepted. A guardrail rejection is final — do not retry or reshape the
    order.
-9. Append a complete journal entry to `state/journal.md` (date/time ET,
+9. Record any NEW fills for the owner's phone alerts. From the
+   `get_equity_orders` data you already pulled in step 3, find orders now in
+   state `filled` or `partially_filled` that are not already listed in
+   `state/fills.jsonl`, and append one JSON object per line for each:
+   `{"order_id","symbol","side","quantity","average_price","filled_at"}`
+   — plus `"pnl_pct"` on a sell, computed against the entry price from the
+   journal, and an optional short `"note"`. Append only; never rewrite or
+   reorder existing lines, and never re-add an order_id already present.
+   Dedupe and delivery are handled downstream, so a line here is enough.
+10. Append a complete journal entry to `state/journal.md` (date/time ET,
    positions with entry prices, orders placed with ref_ids and fill status,
    observations, watch items for next run). Do this even if you placed no
    orders.

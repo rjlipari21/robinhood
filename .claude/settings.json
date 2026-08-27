@@ -22,6 +22,9 @@
       "mcp__robinhood-trading__get_pnl_trade_history",
       "mcp__robinhood-trading__get_realized_pnl",
       "mcp__robinhood-trading__search",
+      "mcp__robinhood-trading__get_scans",
+      "mcp__robinhood-trading__run_scan",
+      "mcp__robinhood-trading__get_scanner_filter_specs",
       "mcp__robinhood-trading__review_equity_order",
       "mcp__robinhood-trading__place_equity_order",
       "mcp__robinhood-trading__cancel_equity_order"
@@ -33,6 +36,9 @@
       "mcp__robinhood-trading__exercise_option",
       "mcp__robinhood-trading__cancel_option_exercise",
       "mcp__robinhood-trading__get_option_level_upgrade_info",
+      "mcp__robinhood-trading__create_scan",
+      "mcp__robinhood-trading__update_scan_config",
+      "mcp__robinhood-trading__update_scan_filters",
       "WebFetch",
       "WebSearch"
     ]

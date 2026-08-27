@@ -65,14 +65,24 @@ LOG="logs/run-$(TZ=America/New_York date +%F).log"
   # technicals across 30 turns, and truncating a run mid-decision is worse than
   # the price difference. Sonnet 5 has the full 1M window.
   #
-  # 30 turns, down from 60: a normal run is journal read + scan + technicals on
-  # a handful of names + review/place pairs + journal write, which lands around
-  # 20-25. The old ceiling mostly bounded runaway runs, and each extra turn
-  # re-reads the whole history. Truncation loses the journal narrative, not the
-  # order record -- the PostToolUse hook writes state/ledger.json, not the agent.
+  # 45 turns. Was 30 (down from an original 60), which proved too tight on
+  # 2026-08-25: the 15:00 ET run placed a TXT exit, then hit the ceiling before
+  # writing its journal entry, so a real fill went unrecorded and the next run
+  # would have read a journal claiming the position was still open.
+  #
+  # The 20-25 turn estimate behind the 30 ceiling was measured on zero-order
+  # runs. A run that manages an exit AND screens for entries with deployable
+  # cash costs materially more: each position exit is a technicals read plus a
+  # review/place pair, and the entry search that follows starts from scratch.
+  #
+  # Truncation is not a clean failure mode. The PostToolUse hook writes
+  # state/ledger.json, so the order record survives -- but the journal is the
+  # only place fills, reasoning, and next-run watch items are recorded, and it
+  # is written last. Losing it is worse than the cost of the extra turns, so
+  # this ceiling should bound runaway runs only, not normal busy ones.
   claude -p "$(cat prompts/trading-run.md)" \
     --output-format text \
     --model claude-sonnet-5 \
-    --max-turns 30
+    --max-turns 45
   echo "===== run finished $(date -u +%FT%TZ) ====="
 } >> "$LOG" 2>&1

@@ -40,7 +40,11 @@
       "mcp__robinhood-trading__update_scan_config",
       "mcp__robinhood-trading__update_scan_filters",
       "WebFetch",
-      "WebSearch"
+      "WebSearch",
+      "Read(//home/rjlipari21/.ssh/**)",
+      "Read(//home/rjlipari21/.claude/.credentials.json)",
+      "Read(//home/rjlipari21/.claude.json)",
+      "Read(//home/rjlipari21/robinhood/.env)"
     ]
   },
   "hooks": {

@@ -34,13 +34,14 @@ Verify these against Robinhood each run — never against the journal alone.
 - **Limit orders only**, both entries and exits. Market and stop orders are
   rejected by the hook. Stop orders are regular-hours-only in any case, which
   is why the protective exit is a limit sell placed by your own check.
-- Sessions: `regular_hours` or `extended_hours` only. `all_day_hours` (the 24
-  Hour Market) is rejected by the hook. The reason is the run window: you only
-  run 07:00–20:00 ET and can only manage a position while you are running, so
-  an overnight-eligible order left working near the 20:00 close could fill with
-  no protective exit until 07:00. Every order you place must be one that can
-  only fill while a run is awake to manage it. Read `config/limits.json` for the
-  sessions the hook accepts.
+- Sessions: tag every order `regular_hours`. `all_day_hours` (the 24 Hour
+  Market) is rejected by the hook, and `extended_hours` — though still accepted
+  by `config/limits.json` — is unreachable now that you only run 09:30–16:00
+  ET. The reason is the run window: you can only manage a position while you
+  are running, so an order left working past 16:00 could fill with no
+  protective exit until 09:30 the next session. Every order you place must be
+  one that can only fill while a run is awake to manage it. Read
+  `config/limits.json` for the sessions the hook accepts.
 - Always pass a fresh UUID as `ref_id` on each `place_equity_order`; reuse the
   same `ref_id` only when retrying a transient transport failure.
 
@@ -117,6 +118,26 @@ Buy an uptrending or basing name that has pulled back to support. Any of:
 - price near the lower end of its 5–10 day range; or
 - a 2%+ dip in a name whose higher-timeframe trend is still up.
 
+**News screen before any buy.** Once a name has passed technicals and you
+intend to buy it — and only then — run `python3 scripts/news-brief.py TICKER`
+and check `get_earnings_results`. Technicals cannot tell you *why* a
+name pulled back, and the two cases look identical on a chart: a liquid name
+dipping on market noise is the setup this strategy wants, while a name dipping
+on a dilutive offering, an investigation, a failed trial, or a pending buyout
+is a permanent repricing that will keep falling through your −5% exit. Veto the
+buy on any of those, and veto it if earnings land inside the next 2 trading
+days — an earnings gap routinely exceeds 5% and will clear the protective exit
+at the open, hours before a run is awake.
+
+`scripts/news-brief.py` fetches the feed VM-side and prints headlines only —
+~165 tokens per ticker against the ~1,900 the raw `get_equity_news` tool costs,
+so pass all your finalists in one call. Its `FLAGS:` line is a keyword hint to
+judge, never a verdict: the feed returns articles that merely *mention* the
+ticker, so check your name is the subject and not an aside, and weight the last
+2–3 sessions over older items. `FLAGS: none` is not a clean bill of health.
+If the script fails it says why on one line — fall back to the
+`get_equity_news` MCP tool rather than skipping the check or blocking the run.
+
 Confirm with `get_equity_historicals` and `get_equity_technical_indicators` —
 never on a quote alone. Check the higher-timeframe trend before buying a dip:
 a name making successive lower closes may still be falling, not basing. When a
@@ -131,6 +152,13 @@ thinner, so widen your read of the price book before leaning on a fill there.
 
 - **Profit target:** +3–5% from entry, or hourly RSI ≥ 65, or price at the
   upper end of its recent range. Sell into strength with a limit order.
+- **News on a triggered position:** when a holding crosses a threshold, check
+  `get_equity_news` for it before selling. This does not make the protective
+  exit discretionary — a −5% position is sold either way — but it tells you
+  whether the move was company-specific (never average down into it) or
+  broad-market noise (worth recording, since it suggests the band is tight),
+  and on an up move whether a takeover bid has capped further upside. Only for
+  positions that actually triggered; never sweep all holdings.
 - **Protective exit:** close any position down **≥5%** from entry with a limit
   sell. There are no stop orders here, so this only happens if you check and
   act — do it first, every run, before looking for entries.
@@ -149,25 +177,39 @@ orders. Sitting in cash is an acceptable and common outcome.
 
 ## Cadence
 
-The scheduler wakes you **every 15 minutes during regular and extended hours
-only** — 07:00 to 20:00 ET, Monday to Friday, last run 19:45. You do not run
-overnight, on weekends, or before 07:00.
+The scheduler wakes you **every 30 minutes during regular hours only** — 09:30
+to 16:00 ET, Monday to Friday, first run 09:30, last run 15:30, thirteen runs
+per day. You do not run overnight, on weekends, pre-market, or post-market.
+
+Narrowed from every-15-minutes/07:00–20:00 on 2026-09-01 to cut compute cost.
+One consequence for you directly: **`extended_hours` is now unreachable.** No
+run ever happens outside regular hours, so every order you place should be
+tagged `regular_hours`. The session guidance further up still describes when
+`extended_hours` would apply and `config/limits.json` still accepts it, but in
+practice you will never be awake during those sessions.
 
 Two things follow from that, and both matter:
 
-- **You see roughly every third 5-minute bar, not every one.** Your entry and
+- **You see roughly every sixth 5-minute bar, not every one.** Your entry and
   exit rules are written against completed 5-minute bars, so treat each run as
-  reading a gap, not a tick. Check what happened across the whole interval
-  since your last run, not just the latest bar — a rung trigger or a
-  protective threshold may have been crossed in a bar you never saw.
-- **Nothing manages positions between 20:00 and 07:00 ET.** This is why
+  reading a gap, not a tick — and the gap is now twice as wide as it was. Check
+  what happened across the whole 30 minutes since your last run, not just the
+  latest bar: a rung trigger or a protective threshold may have been crossed in
+  any of the five bars you never saw. A position can breach the −5% protective
+  threshold and recover before you next look, and you will only see the close.
+- **Nothing manages positions between 16:00 and 09:30 ET** — 17.5 hours, up
+  from the 11 that the old 07:00–20:00 window left. This is why
   `all_day_hours` is disallowed: no order you place should be able to fill
-  during those ~11 unmonitored hours. Positions you already hold still gap
-  overnight — that risk you cannot avoid — but a working order that fills at
-  03:00 with no protective exit for four hours is risk you chose, so the hook
-  removes the option. Any order still working at 20:00 simply expires or sits
-  until the next session; check `get_equity_orders` at the start of each run
-  for what carried over.
+  while nothing is awake to manage it. Positions you already hold still gap
+  across that window — that risk you cannot avoid — but a working order that
+  fills unattended is risk you chose, so the hook removes the option. Any
+  order still working at 16:00 simply expires or sits until the next session;
+  check `get_equity_orders` at the start of each run for what carried over.
+- **The first run of the day is the important one.** With no pre-market run,
+  09:30 is your first sight of prices in 17.5 hours and an overnight gap may
+  already have taken a position past the protective threshold. Do the exit
+  check before anything else, as always, but treat the 09:30 run as the one
+  most likely to need action.
 
 Most runs should still place nothing. A wake-up is not a reason to trade —
 when a setup is marginal, skip it.

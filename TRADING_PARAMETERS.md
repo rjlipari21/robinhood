@@ -121,11 +121,13 @@ missing most dips, because 5-min RSI mean-reverts fast enough that a strict
 grinding-higher tape. Two changes fixed it: widen the dip trigger, and add a
 second path that buys confirmed strength instead of only buying weakness.
 
-Both widened thresholds still apply at the current 5-minute cadence. Polling
-now lands on bar boundaries, so every completed 5-minute bar is seen exactly
-once instead of being read mid-formation — but an intra-bar extreme that
-reverses before the close is still invisible, which is what the wide bands
-are for.
+Both widened thresholds still apply at the current 30-minute cadence, but note
+what that cadence costs them. They were sized when polling landed on every
+5-minute bar boundary; at 30 minutes only one bar in six is seen, so a move
+that starts and reverses inside the gap is invisible — not just an intra-bar
+extreme, but a whole six-bar excursion. The wide bands are what absorb that.
+If reversals inside the gap start costing real money, widening the bands again
+is the lever, not restoring the cadence.
 
 **Path A — dip-buy (unchanged in spirit, wider trigger):**
 - Rung 1 opens on 5-min RSI ≤ 42 (was ≤35 — the tighter threshold was
@@ -186,21 +188,81 @@ are for.
 - Any order rejection, unexpected balance, or tool failure: halt trading
   for that run and notify.
 
+## News & catalyst screen
+- Added 2026-09-01 on owner instruction. Before any buy, and before selling a
+  position that has triggered an exit, the agent checks `get_equity_news` and
+  `get_earnings_results` for that ticker.
+- Purpose: technicals cannot distinguish a noise dip (the setup this strategy
+  wants) from a permanent repricing (dilution, investigation, failed trial,
+  pending buyout). The screen is what tells them apart.
+- **Hard vetoes on a buy:** pending acquisition/merger/going-private bid;
+  announced dilutive offering, ATM or convertible; fraud allegations, SEC/DOJ
+  investigation, restatement, or auditor/CFO/CEO departure; delisting,
+  bankruptcy, going-concern or reverse-split risk; failed trial, lost FDA
+  decision, or lost major contract; **earnings inside the next 2 trading
+  days** (an earnings gap routinely exceeds the −5% exit and clears it at the
+  open, inside the unmonitored window).
+- **Fetched VM-side.** `scripts/news-brief.py` calls the Robinhood MCP endpoint
+  over HTTP outside the agent's context and prints headlines, dates,
+  publishers, and keyword flags — no article bodies. Measured 1,145 tokens for
+  7 tickers (~165 each) against ~1,900 per ticker for the raw
+  `get_equity_news` tool: a ~91% reduction, which is what makes screening
+  several names per run affordable at all. Auth reuses the MCP OAuth token
+  Claude Code already maintains; the token is never printed or logged, and the
+  Read-tool deny on the credential file stays in force.
+- **Fallback is the MCP tool.** Any auth or transport failure exits non-zero
+  with a reason and no partial brief; the agent falls back to
+  `get_equity_news` for the names it actually cares about. A news fetch
+  failing must never block a protective exit — that is the failure mode that
+  cost four runs on 2026-09-01.
+- **Still a gate on finalists, not a list screen.** Even at ~165 tokens a
+  ticker, screening all 50 candidates buys nothing the 9-position ceiling can
+  use. One to three names per run is the intended volume; zero on a run with
+  no entries and no triggered exits.
+- **The keyword flagger is tested, because it fails silently.** A broken regex
+  prints `FLAGS: none`, which reads identically to "this stock is clean". The
+  first version anchored patterns at both ends, so "delist" could not match
+  "delisting" and "resign" could not match "resigns" — real vetoes producing
+  no flag. `scripts/test-news-flags.py` covers 26 positive and 12 negative
+  cases; run it after touching the patterns.
+- **Source is Robinhood's own news feed only.** `WebFetch` and `WebSearch`
+  remain denied in `.claude/settings.json` and should stay denied: this agent
+  places real orders unattended, and arbitrary web content is an injection
+  surface where a crafted page or headline could try to instruct it. A
+  first-party feed is not immune to bad information but it is not an
+  instruction channel.
+- Known limitation: the feed returns articles that merely *mention* the
+  ticker, so relevance is a judgement call, and items run up to ~2 weeks old.
+
 ## Cadence & reporting
-- Analysis/trade runs every 15 minutes during Robinhood's regular and
-  extended sessions only — 07:00 to 20:00 ET, Monday to Friday, last run
-  19:45. Roughly 52 runs per trading day. Each run may analyze, place, or
-  cancel orders within the limits above.
-- The overnight 24 Hour Market window (20:00–07:00 ET) is NOT covered, and as
-  of 2026-08-27 is not traded at all. Two consequences to hold in mind:
+- Analysis/trade runs every 30 minutes during Robinhood's **regular session
+  only** — 09:30 to 16:00 ET, Monday to Friday, first run 09:30, last run
+  15:30. Thirteen runs per trading day. Each run may analyze, place, or cancel
+  orders within the limits above.
+- Narrowed from every-15-minutes / 07:00–20:00 (~52 runs/day) on 2026-09-01,
+  on owner instruction, to cut Claude compute cost. Measured spend at the old
+  cadence was $2.57/run, ~$134/day against a ~$1,000 account; the new cadence
+  plus the Haiku 4.5 model pin is ~$8/day. This is an explicit owner decision
+  to trade monitoring frequency for cost, not a drift.
+- Pre-market and post-market extended sessions are no longer covered. The
+  agent is never awake outside regular hours, so **every order should be
+  tagged `regular_hours`**; `extended_hours` remains accepted by
+  `config/limits.json` but is unreachable in practice.
+- The overnight 24 Hour Market window is NOT covered, and as of 2026-08-27 is
+  not traded at all. Three consequences to hold in mind:
   - Entry and exit decisions read completed 5-minute bars, but the agent now
-    only sees them every third bar. A move that starts and reverses inside a
-    15-minute gap is invisible; the widened Path A/B trigger bands are what
-    absorb that.
+    only sees them every sixth bar. A move that starts and reverses inside a
+    30-minute gap is invisible; the widened Path A/B trigger bands are what
+    absorb that, and they were sized for a 15-minute gap — if reversals inside
+    the gap start costing real money, widening them again is the lever.
+  - Nothing manages positions between 16:00 and 09:30 ET — 17.5 unmonitored
+    hours, up from 11. The 09:30 run is therefore the first sight of prices
+    since the prior close and the one most likely to find a breached
+    protective threshold from an overnight gap.
   - `all_day_hours` is rejected by `hooks/guardrails.py`, so no order can fill
     inside the unmonitored window. Overnight gap risk on positions already
     held remains and is accepted; the fill-while-unattended risk is removed.
-    An order still working at 20:00 does not fill overnight — verify carryover
+    An order still working at 16:00 does not fill overnight — verify carryover
     with `get_equity_orders` at the start of the next run.
 - Every placed/filled/cancelled order triggers a push notification to the
   owner's phone. Silent when no action is taken.

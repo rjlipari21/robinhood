@@ -162,6 +162,36 @@ thinner, so widen your read of the price book before leaning on a fill there.
 - **Protective exit:** close any position down **≥5%** from entry with a limit
   sell. There are no stop orders here, so this only happens if you check and
   act — do it first, every run, before looking for entries.
+- **Earnings exit — close a holding before it reports.** The earnings veto in
+  the entry rules stops you *buying* into a print; this stops you *holding*
+  through one. The trigger is:
+
+  > **On the 14:30 and 15:30 runs**, close any holding that reports `pm` today
+  > or at any time on the next trading day. **On any run**, close a holding
+  > that reports before the next run that day (rare — most reports are `am`
+  > or `pm`, not intraday).
+
+  Stated that way because the obvious phrasing — "reports before your next
+  scheduled run" — is wrong in a way that silently defers the exit to the last
+  run of the day. At 14:30 the next run is 15:30, and a `pm` report today is
+  not before 15:30, so the literal test never fires at 14:30 and you would
+  always be selling into the close. **Prefer 14:30**; 15:30 is the last chance,
+  not the plan, because a limit entered near the close may simply not fill.
+
+  The reasoning is the same as the entry veto and the arithmetic is unchanged:
+  an earnings gap routinely exceeds 5%, the protective exit is a limit sell that
+  only exists when a run places it, and nothing is awake between 16:00 and
+  09:30. A position held through a pre-open print does not have a −5% floor; it
+  has whatever the open decides. Sell a healthy position rather than carry that
+  — a skipped +3% is recoverable and a −20% gap is not, and you can always buy
+  the name back after it reports.
+
+  This costs no extra calls on a normal run. Step 7d already fetches
+  `get_earnings_results` for every name before you buy it, so **record the next
+  report date, its `am`/`pm` timing, and whether it is `verified` in the journal
+  beside the entry price.** Thereafter the check is arithmetic against dates you
+  already hold. Re-fetch for a single holding only when its recorded date is
+  within 3 trading days and was `verified: false`, since tentative dates move.
 - **No averaging down more than once** per position.
 
 ### Circuit breakers

@@ -64,6 +64,32 @@ committed scripts already does.
    Do NOT news-check holdings that have not triggered. That is the whole
    point of putting this step behind a threshold — on a typical run it costs
    nothing because nothing triggered.
+
+   **Earnings check on every holding — this one is not behind a threshold.**
+   A position reporting tonight looks completely normal on a quote, so there is
+   no trigger to gate this on. Read the earnings date you recorded in the
+   journal when you bought each name (step 7d fetches it; record it there) and
+   apply this test:
+   - **If this is the 14:30 or 15:30 run:** close any holding reporting `pm`
+     today, or at any time on the next trading day. Both land in the 17.5-hour
+     unmonitored window.
+   - **On any run:** close a holding reporting before the next run that same
+     day. Rare — most reports are `am` or `pm`, not intraday.
+   - Otherwise do nothing, and carry the date forward in the journal.
+
+   Note the test is NOT "reports before my next scheduled run". At 14:30 the
+   next run is 15:30, and a `pm` report today is not before 15:30, so that
+   phrasing never fires at 14:30 and pushes every earnings exit into the close.
+   **Prefer 14:30.** 15:30 is the last chance, not the plan: a limit sell
+   entered near the close may not fill, and then you are holding through the
+   print anyway with the exit you meant to avoid.
+
+   This is arithmetic on dates you already have, so it costs no calls. Re-fetch
+   `get_earnings_results` for a single holding only when its recorded date is
+   within 3 trading days and was `verified: false` — tentative dates move.
+   If a holding has NO recorded date (bought before this rule, or the feed
+   returned nothing for it), resolve it once with the step 7d fallback below
+   and record the answer.
 5. Cancel any stale working orders that no longer reflect current conditions
    (`get_equity_orders` for open ones, then `cancel_equity_order`).
 6. Only then look for entries. There is no watchlist — build a candidate list
@@ -127,6 +153,19 @@ committed scripts already does.
         with a −5% protective exit and a 17.5-hour unmonitored overnight
         window; an earnings gap routinely exceeds 5% and will blow straight
         through the exit at the open, before any run is awake to act.
+
+      **If `get_earnings_results` returns an empty results array**, the feed
+      has no earnings history for that name — recent spinoffs and new listings
+      do this (MICC/Magnum Ice Cream is the known case in the current book).
+      That is "no data", not "no earnings", and it is not a tool failure. Do
+      not let it pass silently, because a silent pass is indistinguishable from
+      a confirmed-clear name. Call `get_earnings_calendar` with `days: 3` and
+      look for the ticker; if it appears, apply the 2-day veto normally. If it
+      does not appear in the calendar either, you may buy, but **record "no
+      earnings data" in the journal** beside the entry so the blind spot is
+      visible across runs and the step 4 earnings check knows the date is
+      unknown rather than distant. The extra call happens only in the rare
+      empty case, never on a normal buy.
 
       Two judgement notes. First, the tool returns articles where the ticker
       is merely *mentioned* — a KO query returns stories about Nvidia's market

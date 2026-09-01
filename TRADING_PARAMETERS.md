@@ -203,6 +203,40 @@ is the lever, not restoring the cadence.
   decision, or lost major contract; **earnings inside the next 2 trading
   days** (an earnings gap routinely exceeds the −5% exit and clears it at the
   open, inside the unmonitored window).
+- **Hard exit on a holding: never carry a position through its own print.**
+  Added 2026-09-01, same day as the entry veto and for the same reason — the
+  veto only ever gated *buying* into a print, which left the symmetric case
+  open: a position bought while earnings were still distant simply rides
+  through the report unmanaged. The rule: **on the 14:30 and 15:30 runs, close
+  any holding reporting `pm` today or at any time on the next trading day**,
+  and on any run close a holding reporting before that day's next run. 14:30 is
+  preferred and 15:30 is the last chance, not the plan, since a limit entered
+  near the close may not fill. Deliberately not phrased as "reports before the
+  next scheduled run": at 14:30 the next run is 15:30 and a `pm` report today
+  is not before it, so that test never fires at 14:30 and defers every earnings
+  exit into the close.
+
+  This deliberately sells healthy positions roughly once a quarter per name.
+  That cost is accepted: a position held through a pre-open print has no −5%
+  floor, only whatever the open decides, and the name can be bought back after
+  it reports. Found by the first live smoke test of `news-brief.py`, which
+  turned up CXM (3 @ $7.7887) reporting pre-open the next morning — bought
+  12:04 ET, 3h46m before the entry veto was committed at 15:50 ET, so the gate
+  had not failed, it did not yet exist.
+
+  Costs no extra calls: the date is already fetched at entry, and is now
+  recorded in the journal beside the entry price so the per-run check is
+  arithmetic. Re-fetch a single holding only when its recorded date is within
+  3 trading days and was `verified: false`, since tentative dates move.
+- **Empty earnings results are "unknown", not "clear".** `get_earnings_results`
+  returns an empty array for names with no earnings history in the feed —
+  recent spinoffs and new listings. MICC (Magnum Ice Cream, separated from
+  Unilever) is the known case in the current book. Left alone this passes the
+  earnings gate silently, which is indistinguishable from a confirmed-clear
+  name. On an empty array, fall back to `get_earnings_calendar` with `days: 3`
+  and apply the 2-day veto if the ticker appears; if it does not, the buy may
+  proceed but "no earnings data" is recorded in the journal so the blind spot
+  is visible across runs. The extra call fires only in the rare empty case.
 - **Fetched VM-side.** `scripts/news-brief.py` calls the Robinhood MCP endpoint
   over HTTP outside the agent's context and prints headlines, dates,
   publishers, and keyword flags — no article bodies. Measured 1,145 tokens for

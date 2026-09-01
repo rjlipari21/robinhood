@@ -48,8 +48,46 @@ systemd timer (rh-token-refresh@USER.timer)
 | `scripts/setup-vm.sh` | Run on the VM: installs git, Node.js, Claude Code CLI, clones this repo. |
 | `scripts/sync-vm.sh` | Pulls the latest strategy from the active branch. Safe anytime. |
 | `scripts/install-sync-cron.sh` | Installs a cron job running `sync-vm.sh` every 5 minutes. |
-| `systemd/` | Templated units for the trading agent timer. |
+| `scripts/news-brief.py` | Fetches the news feed VM-side and prints headlines only, ~165 tokens/ticker against ~1,900 for the raw tool. |
+| `webapp/` | Read-only dashboard: positions, account state, and the agent's decision log. See below. |
+| `scripts/setup-dashboard.sh` | Installs the dashboard and cloudflared, then walks you through the tunnel. |
+| `scripts/test-dashboard.sh` | End-to-end dashboard check: data layer, HTTP surface, client rendering. |
+| `systemd/` | Templated units for the trading agent timer and the dashboard. |
 | `.mcp.json` | Registers the `robinhood-trading` HTTP MCP server for this repo. |
+
+## Dashboard
+
+A read-only web view of what the agent is doing: current positions with P&L
+against entry and distance to the −5% exit, account value, cash reserve and
+slot usage, and the last 7 days of journal entries rendered as a browsable
+decision log.
+
+```
+sudo ./scripts/setup-dashboard.sh          # install, then follow the printed steps
+sudo ./scripts/setup-dashboard.sh --local  # install only; reach it over an SSH tunnel
+./scripts/test-dashboard.sh                # verify it, read-only, safe anytime
+```
+
+**It is published through a Cloudflare Tunnel, not an open port.** `cloudflared`
+dials out from the VM and Cloudflare forwards requests back down that
+connection, so no inbound port is opened, no firewall rule is needed, and the
+VM's external IP is never a target. Cloudflare Access authenticates at the edge
+with an email one-time PIN, so unauthenticated traffic never reaches the VM.
+
+Two properties hold that up and neither is optional:
+
+- **The server binds `127.0.0.1`.** The tunnel reaches it over loopback. This
+  is what makes the tunnel the only route in.
+- **`DASHBOARD_CF_EMAIL` must match the Access policy.** The server rejects any
+  request whose `Cf-Access-Authenticated-User-Email` header does not match. That
+  header is only trustworthy *because* the origin is unreachable otherwise —
+  which is why "temporarily" binding `0.0.0.0` to debug would make it forgeable.
+
+The dashboard cannot trade. Its data layer can reach exactly five read-only
+Robinhood tools and rejects anything else before building a request, the HTTP
+layer answers only GET and HEAD, and the systemd unit mounts the repo
+`ReadOnlyPaths`. The OAuth token is read at call time and never logged,
+returned, or rendered.
 
 ## Guardrails (enforced in code, not just prompts)
 

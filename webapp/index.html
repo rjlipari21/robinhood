@@ -1,0 +1,629 @@
+<!DOCTYPE html>
+<html lang="en" data-palette="#2a78d6,#e34948">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Trading agent</title>
+<style>
+/* ---------------------------------------------------------------------------
+   Palette. Diverging blue<->red carries profit/loss polarity. Deliberately not
+   green/red: that pair is the classic red-green CVD failure, and P&L is the one
+   encoding on this page that must never be misread. Sign glyphs and numeric
+   labels ride along on every mark so colour is never the only channel.
+   Dark mode is stepped for the dark surface, not an automatic flip, and is
+   declared under both the OS media query and the [data-theme] toggle.
+--------------------------------------------------------------------------- */
+:root {
+  color-scheme: light;
+  --surface-1:#fcfcfb; --plane:#f9f9f7;
+  --ink-1:#0b0b0b; --ink-2:#52514e; --ink-muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --hairline:rgba(11,11,11,.10);
+  --gain:#2a78d6; --loss:#e34948; --mid:#f0efec;
+  --good:#0ca30c; --warning:#fab219; --serious:#ec835a; --critical:#d03b3b;
+  --accent:#2a78d6;
+  --radius:10px;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  --sans:system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme:dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme: dark;
+    --surface-1:#1a1a19; --plane:#0d0d0d;
+    --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --hairline:rgba(255,255,255,.10);
+    --gain:#3987e5; --loss:#e66767; --mid:#383835;
+    --accent:#3987e5;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface-1:#1a1a19; --plane:#0d0d0d;
+  --ink-1:#ffffff; --ink-2:#c3c2b7; --ink-muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --hairline:rgba(255,255,255,.10);
+  --gain:#3987e5; --loss:#e66767; --mid:#383835;
+  --accent:#3987e5;
+}
+
+*{box-sizing:border-box}
+body{margin:0;background:var(--plane);color:var(--ink-1);font-family:var(--sans);
+     font-size:14px;line-height:1.5;-webkit-text-size-adjust:100%}
+.wrap{max-width:1180px;margin:0 auto;padding:20px 16px 64px}
+.card{background:var(--surface-1);border:1px solid var(--hairline);
+      border-radius:var(--radius);padding:16px}
+h1{font-size:17px;margin:0;font-weight:650;letter-spacing:-.01em}
+h2{font-size:13px;margin:0 0 12px;font-weight:650;color:var(--ink-2);
+   text-transform:uppercase;letter-spacing:.06em}
+.sub{color:var(--ink-muted);font-size:12px}
+.num{font-variant-numeric:tabular-nums}
+
+/* header ---------------------------------------------------------------- */
+header{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-start;
+       justify-content:space-between;margin-bottom:16px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;font-size:11.5px;
+      padding:3px 9px;border-radius:999px;border:1px solid var(--hairline);
+      color:var(--ink-2);background:var(--surface-1);white-space:nowrap}
+.chip b{font-weight:600;color:var(--ink-1)}
+.chip.ok    {border-color:color-mix(in srgb,var(--good) 45%,transparent)}
+.chip.warn  {border-color:color-mix(in srgb,var(--warning) 60%,transparent)}
+.chip.crit  {border-color:color-mix(in srgb,var(--critical) 55%,transparent);
+             color:var(--critical)}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+button{font:inherit;color:var(--ink-2);background:var(--surface-1);cursor:pointer;
+       border:1px solid var(--hairline);border-radius:7px;padding:4px 10px}
+button:hover{color:var(--ink-1)}
+button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* KPI row --------------------------------------------------------------- */
+.kpis{display:grid;gap:10px;margin-bottom:16px;
+      grid-template-columns:repeat(auto-fit,minmax(158px,1fr))}
+.kpi .label{font-size:11px;color:var(--ink-muted);text-transform:uppercase;
+            letter-spacing:.05em}
+.kpi .value{font-size:26px;font-weight:640;letter-spacing:-.02em;margin-top:3px}
+.kpi .value.hero{font-size:34px}
+.kpi .foot{font-size:11.5px;color:var(--ink-2);margin-top:2px}
+.gain{color:var(--gain)} .loss{color:var(--loss)}
+
+/* meter ----------------------------------------------------------------- */
+.meter{height:5px;border-radius:3px;background:var(--mid);margin-top:9px;
+       overflow:hidden}
+.meter>i{display:block;height:100%;border-radius:3px;background:var(--accent)}
+
+/* charts ---------------------------------------------------------------- */
+.grid2{display:grid;gap:14px;grid-template-columns:1fr 1fr;margin-bottom:16px}
+@media(max-width:860px){.grid2{grid-template-columns:1fr}}
+svg{display:block;width:100%;overflow:visible}
+.tick{fill:var(--ink-muted);font-size:10.5px}
+.gridline{stroke:var(--grid);stroke-width:1}
+.baseline{stroke:var(--axis);stroke-width:1}
+.thresh{stroke-width:1.5;stroke-dasharray:4 3;fill:none}
+.barlabel{font-size:11px;font-variant-numeric:tabular-nums;fill:var(--ink-1)}
+.symlabel{font-size:11.5px;font-weight:600;fill:var(--ink-1)}
+.legend{display:flex;flex-wrap:wrap;gap:14px;margin-top:10px;font-size:11.5px;
+        color:var(--ink-2)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.swatch{width:11px;height:11px;border-radius:3px;flex:none}
+.swatch.line{height:0;border-top:2px dashed currentColor;border-radius:0;width:14px}
+
+/* tooltip --------------------------------------------------------------- */
+#tip{position:fixed;pointer-events:none;opacity:0;transition:opacity .09s;
+     background:var(--surface-1);color:var(--ink-1);border:1px solid var(--hairline);
+     border-radius:8px;padding:7px 10px;font-size:12px;z-index:60;
+     box-shadow:0 6px 22px rgba(0,0,0,.20);max-width:280px}
+#tip .t{font-weight:650;margin-bottom:3px}
+#tip .r{color:var(--ink-2);font-variant-numeric:tabular-nums}
+
+/* table ----------------------------------------------------------------- */
+.scroll{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th{text-align:right;font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;
+   color:var(--ink-muted);font-weight:600;padding:0 10px 7px;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+td{padding:8px 10px;border-top:1px solid var(--grid);text-align:right;
+   font-variant-numeric:tabular-nums;white-space:nowrap}
+tbody tr:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.sym{font-weight:650;letter-spacing:.01em}
+.flag{font-size:10px;padding:1px 6px;border-radius:5px;margin-left:6px;
+      border:1px solid currentColor;font-weight:600;letter-spacing:.02em}
+.flag.crit{color:var(--critical)} .flag.warn{color:var(--serious)}
+
+/* decision log ---------------------------------------------------------- */
+.daybar{display:flex;align-items:baseline;gap:10px;margin:20px 0 8px;
+        padding-bottom:6px;border-bottom:1px solid var(--grid)}
+.daybar h3{margin:0;font-size:13.5px;font-weight:650}
+details.entry{border:1px solid var(--hairline);border-radius:9px;
+              margin-bottom:6px;background:var(--surface-1);overflow:hidden}
+details.entry>summary{cursor:pointer;padding:9px 12px;display:flex;gap:10px;
+                      align-items:baseline;list-style:none}
+details.entry>summary::-webkit-details-marker{display:none}
+details.entry>summary:hover{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+.etime{font-variant-numeric:tabular-nums;color:var(--ink-muted);font-size:12px;
+       flex:none;min-width:46px}
+.etitle{flex:1;font-size:13px}
+.ebadge{font-size:10.5px;padding:1px 7px;border-radius:999px;flex:none;
+        border:1px solid var(--hairline);color:var(--ink-2)}
+.ebadge.act{border-color:var(--accent);color:var(--accent);font-weight:600}
+.ebody{padding:2px 14px 14px;border-top:1px solid var(--grid);font-size:13px;
+       color:var(--ink-2);overflow-wrap:anywhere}
+.ebody h4{font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+          color:var(--ink-muted);margin:14px 0 5px}
+.ebody strong{color:var(--ink-1)}
+.ebody code{font-family:var(--mono);font-size:12px;
+            background:color-mix(in srgb,var(--ink-1) 7%,transparent);
+            padding:1px 5px;border-radius:4px}
+.ebody ul,.ebody ol{margin:6px 0;padding-left:20px}
+.ebody li{margin:2px 0}
+.ebody table{font-size:12px;margin:8px 0}
+.ebody blockquote{margin:8px 0;padding:2px 0 2px 12px;
+                  border-left:2px solid var(--accent);color:var(--ink-2)}
+.ebody p{margin:7px 0}
+
+.banner{border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;
+        border:1px solid}
+.banner.crit{border-color:var(--critical);
+             background:color-mix(in srgb,var(--critical) 9%,transparent)}
+.banner.warn{border-color:var(--warning);
+             background:color-mix(in srgb,var(--warning) 12%,transparent)}
+.empty{color:var(--ink-muted);padding:22px 0;text-align:center}
+.foot{margin-top:26px;color:var(--ink-muted);font-size:11.5px;text-align:center}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Trading agent</h1>
+      <div class="sub" id="subtitle">loading…</div>
+    </div>
+    <div class="chips" id="chips"></div>
+  </header>
+
+  <div id="banners"></div>
+  <div class="kpis" id="kpis"></div>
+
+  <div class="grid2">
+    <section class="card">
+      <h2>Position P&amp;L vs entry</h2>
+      <div id="plchart"></div>
+    </section>
+    <section class="card">
+      <h2>Account value</h2>
+      <div id="curve"></div>
+    </section>
+  </div>
+
+  <section class="card" style="margin-bottom:16px">
+    <h2>Positions</h2>
+    <div class="scroll"><table id="postable"></table></div>
+  </section>
+
+  <section class="card">
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                flex-wrap:wrap;gap:10px;margin-bottom:4px">
+      <h2 style="margin:0">Decision log</h2>
+      <div class="chips">
+        <button id="fAll"  aria-pressed="true">All runs</button>
+        <button id="fAct"  aria-pressed="false">Only runs that traded</button>
+        <button id="fExp">Expand all</button>
+      </div>
+    </div>
+    <div class="sub" id="logmeta"></div>
+    <div id="log"></div>
+  </section>
+
+  <div class="foot" id="foot"></div>
+</div>
+<div id="tip" role="status" aria-live="polite"></div>
+
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? "" : s)
+  .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
+  .replace(/"/g,"&quot;").replace(/'/g,"&#39;");
+const money = n => (n < 0 ? "-" : "") + "$" +
+  Math.abs(n).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+const pct = n => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(2) + "%";
+const SIGN = n => n > 0 ? "▲" : n < 0 ? "▼" : "—";
+
+let DATA = null, FILTER = "all", EXPANDED = false;
+
+/* ---- tooltip ----------------------------------------------------------- */
+const tip = $("#tip");
+function showTip(evt, title, rows){
+  tip.innerHTML = `<div class="t">${esc(title)}</div>` +
+    rows.map(r => `<div class="r">${esc(r)}</div>`).join("");
+  tip.style.opacity = 1;
+  const pad = 14, w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = evt.clientX + pad, y = evt.clientY + pad;
+  if (x + w > innerWidth  - 8) x = evt.clientX - w - pad;
+  if (y + h > innerHeight - 8) y = evt.clientY - h - pad;
+  tip.style.left = Math.max(8,x) + "px";
+  tip.style.top  = Math.max(8,y) + "px";
+}
+const hideTip = () => { tip.style.opacity = 0; };
+addEventListener("scroll", hideTip, {passive:true});
+
+/* ---- minimal markdown -------------------------------------------------
+   A deliberate subset: exactly what the journal actually contains. Written
+   here rather than pulled from a CDN because the CSP on this page forbids
+   every external origin -- an account dashboard should not be fetching a
+   script from someone else's server. Escaping happens FIRST, on the raw
+   line, so no journal text can inject markup.
+------------------------------------------------------------------------ */
+function inline(s){
+  return esc(s)
+    .replace(/`([^`]+)`/g, (m,a) => `<code>${a}</code>`)
+    .replace(/\*\*([^*]+)\*\*/g, (m,a) => `<strong>${a}</strong>`)
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,;:]|$)/g, (m,p,a) => `${p}<em>${a}</em>`);
+}
+function md(src){
+  const out = [];
+  const lines = String(src || "").split("\n");
+  let list = null, para = [], inTable = false;
+
+  const flushPara = () => {
+    if (para.length){ out.push(`<p>${inline(para.join(" "))}</p>`); para = []; }
+  };
+  const closeList = () => { if (list){ out.push(`</${list}>`); list = null; } };
+  const closeTable = () => { if (inTable){ out.push("</tbody></table>"); inTable = false; } };
+  const closeAll = () => { flushPara(); closeList(); closeTable(); };
+
+  for (let raw of lines){
+    const line = raw.replace(/\s+$/,"");
+    if (!line.trim()){ closeAll(); continue; }
+
+    let m;
+    if ((m = line.match(/^(#{3,6})\s+(.*)$/))){
+      closeAll(); out.push(`<h4>${inline(m[2])}</h4>`); continue;
+    }
+    if (/^\s*\|.*\|\s*$/.test(line)){
+      const cells = line.trim().slice(1,-1).split("|").map(c => c.trim());
+      if (/^[\s|:-]+$/.test(line)) continue;          // the |---|---| rule row
+      if (!inTable){
+        flushPara(); closeList();
+        out.push("<table><tbody>"); inTable = true;
+      }
+      out.push("<tr>" + cells.map(c => `<td>${inline(c)}</td>`).join("") + "</tr>");
+      continue;
+    }
+    closeTable();
+    if ((m = line.match(/^\s*>\s?(.*)$/))){
+      flushPara(); closeList();
+      out.push(`<blockquote>${inline(m[1])}</blockquote>`); continue;
+    }
+    if ((m = line.match(/^\s*[-*]\s+(.*)$/))){
+      flushPara();
+      if (list !== "ul"){ closeList(); out.push("<ul>"); list = "ul"; }
+      out.push(`<li>${inline(m[1])}</li>`); continue;
+    }
+    if ((m = line.match(/^\s*\d+[.)]\s+(.*)$/))){
+      flushPara();
+      if (list !== "ol"){ closeList(); out.push("<ol>"); list = "ol"; }
+      out.push(`<li>${inline(m[1])}</li>`); continue;
+    }
+    if (list && /^\s{2,}\S/.test(line)){                // continuation of an <li>
+      out.push(" " + inline(line.trim())); continue;
+    }
+    closeList();
+    para.push(line.trim());
+  }
+  closeAll();
+  return out.join("");
+}
+
+/* ---- diverging P&L bars ------------------------------------------------
+   Job is polarity (above/below the entry price), so: diverging bars on a
+   single axis, zero anchored, rounded 4px on the data end only. The -5%
+   protective exit and +3% profit target are drawn as reference rules, which
+   is the whole reason this is a chart and not just the table -- distance to
+   a threshold is a spatial question.
+------------------------------------------------------------------------ */
+function drawPL(el, positions){
+  if (!positions.length){ el.innerHTML = '<div class="empty">No open positions.</div>'; return; }
+
+  const rowH = 30, padT = 8, padB = 26, padL = 54, padR = 46;
+  const H = positions.length * rowH + padT + padB;
+  const W = Math.max(el.clientWidth || 520, 320);
+  const vals = positions.map(p => p.pl_pct);
+  const lim = Math.max(6.2, Math.ceil(Math.max(...vals.map(Math.abs), 5.6) + 0.9));
+  const x = v => padL + ((v + lim) / (2 * lim)) * (W - padL - padR);
+  const zero = x(0);
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Profit and loss percent by position">`;
+  for (let t = -Math.floor(lim); t <= Math.floor(lim); t += 2){
+    if (t === 0) continue;
+    s += `<line class="gridline" x1="${x(t)}" y1="${padT}" x2="${x(t)}" y2="${H-padB}"/>`
+       + `<text class="tick" x="${x(t)}" y="${H-padB+14}" text-anchor="middle">${t}%</text>`;
+  }
+  // Reference rules. Dashed + labelled so they never read as data.
+  for (const [v, col, lab] of [[-5,"var(--loss)","exit −5%"],[3,"var(--gain)","target +3%"]]){
+    s += `<line class="thresh" stroke="${col}" x1="${x(v)}" y1="${padT-2}" x2="${x(v)}" y2="${H-padB+2}"/>`
+       + `<text class="tick" x="${x(v)}" y="${padT-4}" text-anchor="middle" fill="${col}">${lab}</text>`;
+  }
+
+  positions.forEach((p,i) => {
+    const y = padT + i * rowH + 6, h = rowH - 14;
+    const v = p.pl_pct, gain = v >= 0;
+    const col = gain ? "var(--gain)" : "var(--loss)";
+    const x0 = Math.min(zero, x(v)), w = Math.max(Math.abs(x(v) - zero), 1.5);
+    // 4px round on the data end only; the zero end stays square on the axis.
+    const r = 4, far = Math.min(r, w);
+    const d = gain
+      ? `M${x0},${y} H${x0+w-far} a${far},${far} 0 0 1 ${far},${far} V${y+h-far} a${far},${far} 0 0 1 -${far},${far} H${x0} Z`
+      : `M${x0+w},${y} H${x0+far} a${far},${far} 0 0 0 -${far},${far} V${y+h-far} a${far},${far} 0 0 0 ${far},${far} H${x0+w} Z`;
+    s += `<path d="${d}" fill="${col}" data-i="${i}"><title></title></path>`;
+    s += `<text class="symlabel" x="${padL-8}" y="${y+h/2+4}" text-anchor="end">${esc(p.symbol)}</text>`;
+    const lx = gain ? x0 + w + 6 : x0 - 6;
+    s += `<text class="barlabel" x="${lx}" y="${y+h/2+4}" text-anchor="${gain?"start":"end"}">${pct(v)}</text>`;
+  });
+  s += `<line class="baseline" x1="${zero}" y1="${padT-2}" x2="${zero}" y2="${H-padB+2}"/></svg>`;
+  el.innerHTML = s + `
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--gain)"></i>Above entry</span>
+      <span><i class="swatch" style="background:var(--loss)"></i>Below entry</span>
+      <span style="color:var(--loss)"><i class="swatch line"></i>Protective exit −5%</span>
+      <span style="color:var(--gain)"><i class="swatch line"></i>Profit target +3%</span>
+    </div>`;
+
+  el.querySelectorAll("path[data-i]").forEach(node => {
+    const p = positions[+node.dataset.i];
+    const near = p.to_stop_pct != null && p.to_stop_pct > -1.5 && p.pl_pct < 0;
+    node.style.cursor = "crosshair";
+    node.addEventListener("mousemove", e => showTip(e, p.symbol, [
+      `${p.quantity} @ ${money(p.entry)} entry`,
+      `last ${money(p.last)}  →  ${pct(p.pl_pct)}  (${money(p.pl)})`,
+      p.day_pct != null ? `day ${pct(p.day_pct)}` : "",
+      `${Math.abs(p.to_stop_pct).toFixed(2)}% from the −5% exit`,
+      `${Math.abs(p.to_target_pct).toFixed(2)}% from the +3% target`,
+      near ? "⚠ close to the protective exit" : "",
+    ].filter(Boolean)));
+    node.addEventListener("mouseleave", hideTip);
+  });
+}
+
+/* ---- account value line ------------------------------------------------ */
+function drawCurve(el, pts){
+  if (pts.length < 2){
+    el.innerHTML = '<div class="empty">Not enough journal entries in this window to plot a curve.</div>';
+    return;
+  }
+  const W = Math.max(el.clientWidth || 520, 320), H = 232;
+  const padL = 54, padR = 12, padT = 12, padB = 26;
+  const vs = pts.map(p => p.v);
+  let lo = Math.min(...vs), hi = Math.max(...vs);
+  const span = (hi - lo) || 1; lo -= span * .18; hi += span * .18;
+  const X = i => padL + (i / (pts.length - 1)) * (W - padL - padR);
+  const Y = v => padT + (1 - (v - lo) / (hi - lo)) * (H - padT - padB);
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Account value over the window">`;
+  for (let k = 0; k <= 4; k++){
+    const v = lo + (k / 4) * (hi - lo), y = Y(v);
+    s += `<line class="gridline" x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}"/>`
+       + `<text class="tick" x="${padL-8}" y="${y+3.5}" text-anchor="end">$${v.toFixed(0)}</text>`;
+  }
+  // The $850 circuit breaker, but only when it is actually in frame -- an
+  // off-scale rule squashed against the axis would be noise, not information.
+  if (850 >= lo && 850 <= hi){
+    s += `<line class="thresh" stroke="var(--critical)" x1="${padL}" y1="${Y(850)}" x2="${W-padR}" y2="${Y(850)}"/>`
+       + `<text class="tick" x="${W-padR}" y="${Y(850)-5}" text-anchor="end" fill="var(--critical)">circuit breaker $850</text>`;
+  }
+  const d = pts.map((p,i) => `${i?"L":"M"}${X(i).toFixed(1)},${Y(p.v).toFixed(1)}`).join("");
+  const first = pts[0].v, last = pts[pts.length-1].v;
+  const col = last >= first ? "var(--gain)" : "var(--loss)";
+  s += `<path d="${d}" fill="none" stroke="${col}" stroke-width="2"
+              stroke-linejoin="round" stroke-linecap="round"/>`;
+  s += `<circle cx="${X(pts.length-1)}" cy="${Y(last)}" r="4" fill="${col}"
+              stroke="var(--surface-1)" stroke-width="2"/>`;
+  s += `<line class="baseline" x1="${padL}" y1="${H-padB}" x2="${W-padR}" y2="${H-padB}"/>`;
+  s += `<text class="tick" x="${padL}" y="${H-padB+15}">${esc(pts[0].t.slice(5))}</text>`;
+  s += `<text class="tick" x="${W-padR}" y="${H-padB+15}" text-anchor="end">${esc(pts[pts.length-1].t.slice(5))}</text>`;
+  s += `<line id="cross" class="baseline" y1="${padT}" y2="${H-padB}" style="opacity:0"/>`;
+  s += `<rect x="${padL}" y="${padT}" width="${W-padL-padR}" height="${H-padT-padB}" fill="transparent"/>`;
+  s += `</svg>`;
+  const delta = last - first, dp = first ? (delta / first) * 100 : 0;
+  el.innerHTML = s + `<div class="legend"><span>
+      ${pts.length} journal readings &middot;
+      <b class="${delta>=0?"gain":"loss"}">${pct(dp)}</b> over the window
+      (${money(delta)})</span></div>`;
+
+  const svg = el.querySelector("svg"), cross = el.querySelector("#cross");
+  svg.addEventListener("mousemove", e => {
+    const r = svg.getBoundingClientRect();
+    const px = (e.clientX - r.left) / r.width * W;
+    if (px < padL || px > W - padR){ hideTip(); cross.style.opacity = 0; return; }
+    const i = Math.round(((px - padL) / (W - padL - padR)) * (pts.length - 1));
+    const p = pts[Math.max(0, Math.min(pts.length - 1, i))];
+    cross.setAttribute("x1", X(i)); cross.setAttribute("x2", X(i));
+    cross.style.opacity = .55;
+    showTip(e, p.t, [money(p.v)]);
+  });
+  svg.addEventListener("mouseleave", () => { hideTip(); cross.style.opacity = 0; });
+}
+
+/* ---- render ------------------------------------------------------------ */
+function renderKPIs(d){
+  const pf = d.portfolio || {};
+  const pl = (d.positions || []).reduce((a,p) => a + p.pl, 0);
+  const basis = (d.positions || []).reduce((a,p) => a + p.basis, 0);
+  const plPct = basis ? (pl / basis) * 100 : 0;
+  const resPct = pf.total_value ? (pf.cash / pf.total_value) * 100 : 0;
+  const slotPct = (pf.slots_used / (pf.slots_max || 9)) * 100;
+
+  $("#kpis").innerHTML = `
+    <div class="card kpi">
+      <div class="label">Account value</div>
+      <div class="value hero num">${money(pf.total_value || 0)}</div>
+      <div class="foot">equity ${money(pf.equity_value || 0)}</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">Unrealised P&amp;L</div>
+      <div class="value num ${pl>=0?"gain":"loss"}">${money(pl)}</div>
+      <div class="foot ${pl>=0?"gain":"loss"}">${SIGN(pl)} ${pct(plPct)} on ${money(basis)} at cost</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">Settled buying power</div>
+      <div class="value num">${money(pf.buying_power || 0)}</div>
+      <div class="foot">${money(pf.unsettled_funds || 0)} unsettled (T+1)</div>
+    </div>
+    <div class="card kpi">
+      <div class="label">Cash reserve</div>
+      <div class="value num">${resPct.toFixed(1)}%</div>
+      <div class="foot">${pf.reserve_ok ? "above the 10% floor" : "BELOW the 10% floor"}</div>
+      <div class="meter"><i style="width:${Math.min(100,resPct*4)}%;
+        background:${pf.reserve_ok?"var(--accent)":"var(--critical)"}"></i></div>
+    </div>
+    <div class="card kpi">
+      <div class="label">Positions</div>
+      <div class="value num">${pf.slots_used || 0}<span style="font-size:16px;color:var(--ink-muted)"> / ${pf.slots_max || 9}</span></div>
+      <div class="foot">${(d.open_orders||[]).length} order(s) working</div>
+      <div class="meter"><i style="width:${slotPct}%"></i></div>
+    </div>`;
+}
+
+function renderChips(d){
+  const st = d.status || {}, pf = d.portfolio || {};
+  const c = [];
+  const chip = (cls, dot, html) =>
+    `<span class="chip ${cls}">${dot?`<i class="dot" style="background:${dot}"></i>`:""}${html}</span>`;
+  c.push(st.halt
+    ? chip("crit", "var(--critical)", "<b>HALTED</b> — kill switch set")
+    : chip("ok", "var(--good)", "Agent <b>armed</b>"));
+  if (pf.circuit_breaker)
+    c.push(chip("crit","var(--critical)","<b>Circuit breaker</b> — under $850"));
+  if (st.last_run)
+    c.push(chip(st.last_rc === 0 ? "" : "warn", null,
+      `Last run <b>${esc(st.last_run.replace("T"," ").replace("Z"," UTC"))}</b> rc=${st.last_rc}`));
+  c.push(chip("", null, esc(st.cadence || "")));
+  c.push(`<button id="themeBtn" title="Toggle light and dark">◐</button>`);
+  $("#chips").innerHTML = c.join("");
+  $("#themeBtn").onclick = () => {
+    const dark = document.documentElement.getAttribute("data-theme") === "dark"
+      || (!document.documentElement.hasAttribute("data-theme")
+          && matchMedia("(prefers-color-scheme: dark)").matches);
+    document.documentElement.setAttribute("data-theme", dark ? "light" : "dark");
+    draw();                                   // re-render: SVG reads the vars once
+  };
+}
+
+function renderBanners(d){
+  const b = [];
+  if (d.fatal) b.push(`<div class="banner crit"><b>Dashboard error.</b> ${esc(d.fatal)}</div>`);
+  if (d.live_error)
+    b.push(`<div class="banner warn"><b>Live account data unavailable.</b> ${esc(d.live_error)}.
+      ${d.live_stale ? "Showing the last good snapshot." : "Positions may be incomplete."}
+      The journal below is read from disk and is unaffected.</div>`);
+  if ((d.status||{}).halt)
+    b.push(`<div class="banner crit"><b>Kill switch is set.</b>
+      <code>state/HALT</code> exists, so every run exits immediately without trading.</div>`);
+  $("#banners").innerHTML = b.join("");
+}
+
+function renderTable(d){
+  const rows = (d.positions || []).map(p => {
+    const nearStop = p.pl_pct < 0 && p.to_stop_pct > -1.5;
+    const nearTgt  = p.to_target_pct < 1 && p.pl_pct > 0;
+    let flag = "";
+    if (nearStop) flag = `<span class="flag crit">near exit</span>`;
+    else if (nearTgt) flag = `<span class="flag warn">near target</span>`;
+    if (!p.priced) flag += `<span class="flag warn">unpriced</span>`;
+    else if (!p.tradeable) flag += `<span class="flag warn">not active</span>`;
+    return `<tr>
+      <td><span class="sym">${esc(p.symbol)}</span>${flag}</td>
+      <td>${p.quantity}</td>
+      <td>${money(p.entry)}</td>
+      <td>${money(p.last)}</td>
+      <td class="${p.pl_pct>=0?"gain":"loss"}">${pct(p.pl_pct)}</td>
+      <td class="${p.pl>=0?"gain":"loss"}">${money(p.pl)}</td>
+      <td>${p.day_pct==null?"—":`<span class="${p.day_pct>=0?"gain":"loss"}">${pct(p.day_pct)}</span>`}</td>
+      <td>${money(p.value)}</td>
+      <td class="sub">${Math.abs(p.to_stop_pct).toFixed(2)}%</td>
+    </tr>`;
+  }).join("");
+  $("#postable").innerHTML = rows ? `<thead><tr>
+      <th>Symbol</th><th>Qty</th><th>Entry</th><th>Last</th><th>P&amp;L %</th>
+      <th>P&amp;L $</th><th>Day</th><th>Value</th><th>To exit</th>
+    </tr></thead><tbody>${rows}</tbody>`
+    : `<tbody><tr><td class="empty" colspan="9">No open positions — sitting in cash.</td></tr></tbody>`;
+}
+
+function renderLog(d){
+  const all = d.journal || [];
+  const list = FILTER === "act" ? all.filter(e => e.orders_placed > 0) : all;
+  $("#logmeta").textContent =
+    `${list.length} of ${all.length} entries over the last ${d.window_days} days`
+    + (FILTER === "act" ? " (runs that placed at least one order)" : "");
+
+  if (!list.length){ $("#log").innerHTML = '<div class="empty">Nothing in this window.</div>'; return; }
+
+  const byDay = new Map();
+  for (const e of list){
+    if (!byDay.has(e.date)) byDay.set(e.date, []);
+    byDay.get(e.date).push(e);
+  }
+
+  const today = list[0].date;
+  let html = "";
+  for (const [day, entries] of byDay){
+    const traded = entries.reduce((a,e) => a + (e.orders_placed || 0), 0);
+    html += `<div class="daybar"><h3>${esc(day)}</h3>
+      <span class="sub">${entries.length} run${entries.length>1?"s":""}${
+        traded ? ` &middot; ${traded} order${traded>1?"s":""} placed` : " &middot; no orders"}</span></div>`;
+    for (const e of entries){
+      const open = EXPANDED || (day === today && entries.indexOf(e) === 0);
+      html += `<details class="entry"${open?" open":""}>
+        <summary>
+          <span class="etime">${esc(e.time)}</span>
+          <span class="etitle">${inline(e.title || e.heading)}</span>
+          ${e.orders_placed ? `<span class="ebadge act">${e.orders_placed} order${e.orders_placed>1?"s":""}</span>`
+                            : `<span class="ebadge">no orders</span>`}
+        </summary>
+        <div class="ebody">${md(e.body)}</div>
+      </details>`;
+    }
+  }
+  $("#log").innerHTML = html;
+}
+
+function draw(){
+  if (!DATA) return;
+  drawPL($("#plchart"), DATA.positions || []);
+  drawCurve($("#curve"), DATA.equity_curve || []);
+}
+
+function render(d){
+  DATA = d;
+  $("#subtitle").textContent =
+    `account 797887684 · ${d.positions ? d.positions.length : 0} positions · data as of ${d.generated_at || "?"}`;
+  renderChips(d); renderBanners(d); renderKPIs(d); renderTable(d); renderLog(d); draw();
+  $("#foot").textContent =
+    `Read-only. ${(d.fills||[]).length} fills and ${(d.orders||[]).length} orders in the window. `
+    + `Live prices cached 60s; refreshes every 60s.`;
+}
+
+async function load(){
+  try {
+    const r = await fetch("/api/snapshot?days=7", {cache:"no-store"});
+    render(await r.json());
+  } catch (err) {
+    $("#banners").innerHTML =
+      `<div class="banner crit"><b>Could not reach the dashboard API.</b> ${esc(err.message)}</div>`;
+  }
+}
+
+$("#fAll").onclick = () => { FILTER="all";
+  $("#fAll").setAttribute("aria-pressed","true"); $("#fAct").setAttribute("aria-pressed","false");
+  renderLog(DATA); };
+$("#fAct").onclick = () => { FILTER="act";
+  $("#fAct").setAttribute("aria-pressed","true"); $("#fAll").setAttribute("aria-pressed","false");
+  renderLog(DATA); };
+$("#fExp").onclick = () => { EXPANDED = !EXPANDED;
+  $("#fExp").textContent = EXPANDED ? "Collapse all" : "Expand all"; renderLog(DATA); };
+
+addEventListener("resize", () => { clearTimeout(window._rz); window._rz = setTimeout(draw, 140); });
+load();
+setInterval(load, 60000);
+</script>
+</body>
+</html>

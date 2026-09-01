@@ -159,6 +159,24 @@ details.entry>summary:hover{background:color-mix(in srgb,var(--accent) 6%,transp
                   border-left:2px solid var(--accent);color:var(--ink-2)}
 .ebody p{margin:7px 0}
 
+/* activity -------------------------------------------------------------- */
+.stats{display:grid;gap:14px;margin-bottom:16px;
+       grid-template-columns:repeat(auto-fit,minmax(136px,1fr))}
+.stats .value{font-size:22px}
+/* BUY/SELL is identity, not polarity, so it stays in ink. The diverging pair
+   is reserved for return: a buy is not "good" and a sell is not "bad", and
+   reusing the P&L colours here would say exactly that. */
+.side{font-size:10px;font-weight:700;letter-spacing:.04em;padding:1px 6px;
+      border-radius:5px;flex:none;border:1px solid var(--hairline);
+      color:var(--ink-2);background:color-mix(in srgb,var(--ink-1) 5%,transparent)}
+.side.sell{border-style:dashed}
+.eret{font-variant-numeric:tabular-nums;font-size:12.5px;font-weight:650;flex:none}
+.efill{font-variant-numeric:tabular-nums;color:var(--ink-2);font-size:12.5px;flex:1}
+.enote{font-size:12.5px;color:var(--ink-2);overflow-wrap:anywhere}
+.emeta{font-family:var(--mono);font-size:11px;color:var(--ink-muted);
+       margin-top:9px;overflow-wrap:anywhere}
+.symtick{font-size:10px}
+
 .banner{border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;
         border:1px solid}
 .banner.crit{border-color:var(--critical);
@@ -198,6 +216,25 @@ details.entry>summary:hover{background:color-mix(in srgb,var(--accent) 6%,transp
     <div class="scroll"><table id="postable"></table></div>
   </section>
 
+  <section class="card" style="margin-bottom:16px">
+    <h2>Realized outcomes &mdash; closed trades</h2>
+    <div class="stats" id="realkpis"></div>
+    <div id="realchart"></div>
+  </section>
+
+  <section class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                flex-wrap:wrap;gap:10px;margin-bottom:4px">
+      <h2 style="margin:0">Order activity</h2>
+      <div class="chips">
+        <button id="aAll"  aria-pressed="true">All orders</button>
+        <button id="aFill" aria-pressed="false">Fills only</button>
+      </div>
+    </div>
+    <div class="sub" id="actmeta"></div>
+    <div id="activity"></div>
+  </section>
+
   <section class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;
                 flex-wrap:wrap;gap:10px;margin-bottom:4px">
@@ -227,7 +264,7 @@ const money = n => (n < 0 ? "-" : "") + "$" +
 const pct = n => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(2) + "%";
 const SIGN = n => n > 0 ? "▲" : n < 0 ? "▼" : "—";
 
-let DATA = null, FILTER = "all", EXPANDED = false;
+let DATA = null, FILTER = "all", ACTFILTER = "all", EXPANDED = false;
 
 /* ---- tooltip ----------------------------------------------------------- */
 const tip = $("#tip");
@@ -443,6 +480,190 @@ function drawCurve(el, pts){
 }
 
 /* ---- render ------------------------------------------------------------ */
+/* ---- realized outcomes, one column per closed trade -------------------- */
+/* Polarity against a baseline, so: diverging bars, zero-anchored, with the
+   two thresholds the mandate actually trades as dashed reference rules. The
+   scale is deliberately the same as the open-position chart above, so a
+   closed trade and a live one can be compared across the two cards without
+   re-reading an axis. Columns run oldest to newest left to right -- the
+   question this answers is whether the +3%/-5% band is holding up over time,
+   which is a sequence, not a ranking. */
+function drawRealized(el, trades){
+  if (!trades.length){
+    el.innerHTML = '<div class="empty">No closed trades in this window — nothing realized yet.</div>';
+    return;
+  }
+  const W = Math.max(el.clientWidth || 520, 320), H = 252;
+  const padL = 46, padR = 62, padT = 14, padB = 46;
+  const vals = trades.map(t => t.pnl_pct);
+  const lim = Math.max(6.2, Math.ceil(Math.max(...vals.map(Math.abs), 5.6) + 0.9));
+  const y = v => padT + (1 - (v + lim) / (2 * lim)) * (H - padT - padB);
+  const zero = y(0), n = trades.length;
+  const slot = (W - padL - padR) / n;
+  const bw = Math.max(3, Math.min(22, slot * 0.62));
+  const cx = i => padL + slot * (i + 0.5);
+  // One ticker per column while they fit; thin the labels rather than let them
+  // collide, since the hover layer carries the identity of every column anyway.
+  const step = slot < 13 ? Math.ceil(13 / slot) : 1;
+
+  let s = `<svg viewBox="0 0 ${W} ${H}" role="img"
+    aria-label="Realized return percent per closed trade, oldest to newest">`;
+  for (let t = -Math.floor(lim); t <= Math.floor(lim); t += 2){
+    if (t === 0) continue;
+    s += `<line class="gridline" x1="${padL}" y1="${y(t)}" x2="${W-padR}" y2="${y(t)}"/>`
+       + `<text class="tick" x="${padL-8}" y="${y(t)+3.5}" text-anchor="end">${t}%</text>`;
+  }
+  // Dashed and captioned so a rule never reads as a bar.
+  for (const [v, col, lab] of [[-5,"var(--loss)","exit −5%"],[3,"var(--gain)","target +3%"]]){
+    s += `<line class="thresh" stroke="${col}" x1="${padL}" y1="${y(v)}" x2="${W-padR+2}" y2="${y(v)}"/>`
+       + `<text class="tick" x="${W-padR+6}" y="${y(v)+3.5}" text-anchor="start" fill="${col}">${lab}</text>`;
+  }
+
+  // Direct labels on the extremes and the latest only: a number on every
+  // column would be noise, and these three are the ones a reader looks for.
+  const marked = new Set([vals.indexOf(Math.max(...vals)),
+                          vals.indexOf(Math.min(...vals)), n - 1]);
+  trades.forEach((t,i) => {
+    const v = t.pnl_pct, gain = v >= 0;
+    const col = gain ? "var(--gain)" : "var(--loss)";
+    const x0 = cx(i) - bw / 2;
+    const h = Math.max(Math.abs(y(v) - zero), 1.5);
+    const yT = gain ? zero - h : zero;
+    const r = Math.min(4, bw / 2, h);
+    // 4px round on the data end only; the zero end stays square on the axis.
+    const d = gain
+      ? `M${x0},${yT+h} V${yT+r} a${r},${r} 0 0 1 ${r},-${r} H${x0+bw-r} a${r},${r} 0 0 1 ${r},${r} V${yT+h} Z`
+      : `M${x0},${yT} V${yT+h-r} a${r},${r} 0 0 0 ${r},${r} H${x0+bw-r} a${r},${r} 0 0 0 ${r},-${r} V${yT} Z`;
+    s += `<path d="${d}" fill="${col}" data-i="${i}"><title></title></path>`;
+    if (marked.has(i))
+      s += `<text class="barlabel" x="${cx(i)}" y="${gain ? yT-5 : yT+h+11}"
+             text-anchor="middle">${pct(v)}</text>`;
+    if (i % step === 0)
+      s += `<text class="tick symtick" transform="rotate(-90 ${cx(i)} ${H-padB+9})"
+             x="${cx(i)}" y="${H-padB+9}" text-anchor="end">${esc(t.symbol)}</text>`;
+  });
+  s += `<line class="baseline" x1="${padL}" y1="${zero}" x2="${W-padR}" y2="${zero}"/></svg>`;
+
+  el.innerHTML = s + `
+    <div class="legend">
+      <span><i class="swatch" style="background:var(--gain)"></i>Closed for a gain</span>
+      <span><i class="swatch" style="background:var(--loss)"></i>Closed for a loss</span>
+      <span style="color:var(--loss)"><i class="swatch line"></i>Protective exit −5%</span>
+      <span style="color:var(--gain)"><i class="swatch line"></i>Profit target +3%</span>
+      <span class="sub">oldest → newest, left to right</span>
+    </div>`;
+
+  el.querySelectorAll("path[data-i]").forEach(node => {
+    const t = trades[+node.dataset.i];
+    node.style.cursor = "crosshair";
+    node.addEventListener("mousemove", e => showTip(e, t.symbol, [
+      `${t.date_et} ${t.time_et} ET`,
+      `sold ${t.quantity} @ ${money(t.price)}`,
+      `realized ${pct(t.pnl_pct)}`,
+      t.pnl_pct <= -5 ? "⚠ protective exit" : t.pnl_pct >= 3 ? "profit target" : "",
+      t.note ? t.note.slice(0, 150) + (t.note.length > 150 ? "…" : "") : "",
+    ].filter(Boolean)));
+    node.addEventListener("mouseleave", hideTip);
+  });
+}
+
+function renderRealized(d){
+  const a = d.activity || {};
+  const tile = (label, value, cls, foot) =>
+    `<div class="kpi"><div class="label">${label}</div>
+      <div class="value num ${cls||""}">${value}</div>
+      <div class="foot">${foot}</div></div>`;
+  const n = a.closed || 0;
+  $("#realkpis").innerHTML = !n
+    ? tile("Closed trades", "0", "", `nothing realized in the last ${d.window_days} days`)
+    : [
+      tile("Win rate", `${a.win_rate.toFixed(1)}%`, "",
+           `${a.wins} up, ${a.losses} down of ${n} closed`),
+      tile("Average return", pct(a.avg_pnl_pct), a.avg_pnl_pct >= 0 ? "gain" : "loss",
+           "per closed trade, unweighted"),
+      tile("Best", pct(a.best_pnl_pct), "gain",
+           `${a.hit_target} cleared the +3% target`),
+      tile("Worst", pct(a.worst_pnl_pct), "loss",
+           `${a.hit_stop} hit the −5% exit`),
+      tile("Fill rate", a.fill_rate == null ? "—" : `${a.fill_rate.toFixed(1)}%`, "",
+           `${a.matched} of ${a.placed} limit orders filled`),
+    ].join("");
+
+  // Oldest first for the chart; the event list itself is newest first.
+  const closed = (a.events || [])
+    .filter(e => e.side === "sell" && e.pnl_pct != null)
+    .slice().reverse();
+  drawRealized($("#realchart"), closed);
+}
+
+/* ---- order activity ---------------------------------------------------- */
+function renderActivity(d){
+  const a = d.activity || {};
+  const all = a.events || [];
+  const list = ACTFILTER === "fill" ? all.filter(e => e.kind === "fill") : all;
+  const working = (d.open_orders || []).length;
+
+  $("#actmeta").textContent =
+    `${a.matched || 0} of ${a.placed || 0} orders placed in the last ${d.window_days} days filled`
+    + (a.unfilled ? `; ${a.unfilled} never filled` : "")
+    + (working ? `, and ${working} still working now` : "")
+    + (a.earlier_fills ? `. ${a.earlier_fills} fill(s) came from orders placed before this window.` : ".");
+
+  if (!list.length){
+    $("#activity").innerHTML = '<div class="empty">No orders in this window.</div>';
+    return;
+  }
+
+  const byDay = new Map();
+  for (const e of list){
+    if (!byDay.has(e.date_et)) byDay.set(e.date_et, []);
+    byDay.get(e.date_et).push(e);
+  }
+  let html = "";
+  for (const [day, evs] of byDay){
+    const fl = evs.filter(e => e.kind === "fill").length;
+    html += `<div class="daybar"><h3>${esc(day)}</h3>
+      <span class="sub">${evs.length} order${evs.length>1?"s":""} &middot; ${fl} filled</span></div>`;
+    for (const e of evs){
+      const px = e.kind === "fill"
+        ? `${e.quantity} @ ${money(e.price)}`
+        : `${e.quantity} @ ${money(e.limit_price)} limit`;
+      const ret = e.pnl_pct == null ? ""
+        : `<span class="eret ${e.pnl_pct>=0?"gain":"loss"}">${pct(e.pnl_pct)}</span>`;
+      // An unfilled order from today may still be working rather than dead;
+      // the meta line above carries the open-order count that settles it.
+      const badge = e.kind === "fill"
+        ? `<span class="ebadge act">filled</span>`
+        : `<span class="ebadge">unfilled</span>`;
+      html += `<details class="entry">
+        <summary>
+          <span class="etime">${esc(e.time_et)}</span>
+          <span class="side ${e.side === "buy" ? "buy" : "sell"}">${esc(e.side.toUpperCase())}</span>
+          <span class="sym">${esc(e.symbol)}</span>
+          <span class="efill">${px}</span>
+          ${ret}${badge}
+        </summary>
+        <div class="ebody">
+          ${e.note ? `<div class="enote">${esc(e.note)}</div>`
+                   : `<div class="enote sub">No fill note — this order has no
+                      recorded fill, so the agent never wrote one.</div>`}
+          <div class="emeta">
+            ${e.limit_price != null ? `limit ${money(e.limit_price)}` : "limit not in window"}
+            ${e.price != null ? ` · filled ${money(e.price)}` : ""}
+            ${e.vs_limit_pct != null
+               ? ` · ${e.vs_limit_pct >= 0 ? "better than" : "worse than"} the limit by ${Math.abs(e.vs_limit_pct).toFixed(3)}%`
+               : ""}
+            ${e.notional != null ? ` · ${money(e.notional)} notional` : ""}<br>
+            ${e.ref_id ? `ref_id ${esc(e.ref_id)}` : "no ledger row in window"}
+            ${e.order_id ? `<br>order_id ${esc(e.order_id)}` : ""}
+          </div>
+        </div>
+      </details>`;
+    }
+  }
+  $("#activity").innerHTML = html;
+}
+
 function renderKPIs(d){
   const pf = d.portfolio || {};
   const pl = (d.positions || []).reduce((a,p) => a + p.pl, 0);
@@ -590,15 +811,19 @@ function draw(){
   if (!DATA) return;
   drawPL($("#plchart"), DATA.positions || []);
   drawCurve($("#curve"), DATA.equity_curve || []);
+  renderRealized(DATA);          // owns its own chart, so it redraws with them
 }
 
 function render(d){
   DATA = d;
   $("#subtitle").textContent =
     `account 797887684 · ${d.positions ? d.positions.length : 0} positions · data as of ${d.generated_at || "?"}`;
-  renderChips(d); renderBanners(d); renderKPIs(d); renderTable(d); renderLog(d); draw();
+  renderChips(d); renderBanners(d); renderKPIs(d); renderTable(d);
+  renderActivity(d); renderLog(d); draw();
+  const a = d.activity || {};
   $("#foot").textContent =
-    `Read-only. ${(d.fills||[]).length} fills and ${(d.orders||[]).length} orders in the window. `
+    `Read-only. ${a.matched || 0} fills from ${a.placed || 0} orders placed and `
+    + `${a.closed || 0} closed trades in the window. `
     + `Live prices cached 60s; refreshes every 60s.`;
 }
 
@@ -618,6 +843,12 @@ $("#fAll").onclick = () => { FILTER="all";
 $("#fAct").onclick = () => { FILTER="act";
   $("#fAct").setAttribute("aria-pressed","true"); $("#fAll").setAttribute("aria-pressed","false");
   renderLog(DATA); };
+$("#aAll").onclick = () => { ACTFILTER="all";
+  $("#aAll").setAttribute("aria-pressed","true"); $("#aFill").setAttribute("aria-pressed","false");
+  renderActivity(DATA); };
+$("#aFill").onclick = () => { ACTFILTER="fill";
+  $("#aFill").setAttribute("aria-pressed","true"); $("#aAll").setAttribute("aria-pressed","false");
+  renderActivity(DATA); };
 $("#fExp").onclick = () => { EXPANDED = !EXPANDED;
   $("#fExp").textContent = EXPANDED ? "Collapse all" : "Expand all"; renderLog(DATA); };
 

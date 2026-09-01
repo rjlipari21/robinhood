@@ -482,6 +482,10 @@ def fills(days: int = 7) -> list:
                     "quantity": _f(r.get("quantity")),
                     "price": _f(r.get("average_price")),
                     "filled_at": ts,
+                    # Present on sells only: the agent records the realized
+                    # return against its own entry when it closes a position.
+                    "pnl_pct": (None if r.get("pnl_pct") is None
+                                else _f(r.get("pnl_pct"), None)),
                     "note": r.get("note") or "",
                 })
     except OSError:
@@ -523,6 +527,136 @@ def orders(days: int = 7) -> list:
         })
     out.sort(key=lambda r: r["at"], reverse=True)
     return out
+
+
+def _utc(ts: str):
+    """Parse either record's timestamp shape, or None."""
+    try:
+        return datetime.fromisoformat((ts or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def activity(days: int = 7) -> dict:
+    """Orders placed joined to the fills they produced, newest first.
+
+    THE JOIN IS INFERRED, and the wording on the page reflects that. The two
+    records share no key: the ledger is written by the hook and keys on the
+    client-side `ref_id` the agent generated, while fills.jsonl keys on the
+    order id Robinhood assigned. So an order is matched to the earliest
+    unclaimed fill with the same symbol, side and quantity at a plausible
+    time. That is unambiguous in practice because the mandate allows one
+    position per ticker and the agent places at most one order per ticker per
+    run; where it would not be, the consequence is that two same-shape orders
+    swap notes, not that a number is wrong -- every displayed field comes from
+    whichever record actually holds it, never from the join.
+
+    The tolerance runs from 3 minutes BEFORE the order to 24 hours after. The
+    lower bound is not defensive padding: the hook appends to the ledger after
+    the order round-trips, so an order that fills instantly is recorded in
+    fills.jsonl with a timestamp fractionally earlier than its own ledger row.
+
+    An unmatched order is reported `unfilled`, which for the current session
+    can mean "still working" rather than "expired" -- `live_state()`'s
+    open_orders is the authority on that, and the page says so. An unmatched
+    fill means the order that produced it was placed before this window, so it
+    is shown with no limit price rather than dropped: it is still a trade that
+    happened.
+    """
+    placed = orders(days)
+    got = fills(days)
+    for f in got:
+        f["_claimed"] = False
+
+    events, matched = [], 0
+    for o in sorted(placed, key=lambda r: r["at"]):
+        o_at = _utc(o["at"])
+        best = None
+        for f in sorted(got, key=lambda r: r["filled_at"]):
+            if f["_claimed"] or f["symbol"] != o["symbol"] or f["side"] != o["side"]:
+                continue
+            if abs(f["quantity"] - o["quantity"]) > 1e-6:
+                continue
+            f_at = _utc(f["filled_at"])
+            if o_at is None or f_at is None:
+                continue
+            if -180 <= (f_at - o_at).total_seconds() <= 86400:
+                best = f
+                break
+        if best is not None:
+            best["_claimed"] = True
+            matched += 1
+        events.append(_event(o, best))
+
+    for f in got:
+        if not f["_claimed"]:
+            events.append(_event(None, f))
+
+    events.sort(key=lambda e: e["at"], reverse=True)
+    for f in got:
+        f.pop("_claimed", None)
+
+    closed = [e["pnl_pct"] for e in events
+              if e["side"] == "sell" and e["pnl_pct"] is not None]
+    wins = [v for v in closed if v > 0]
+    return {
+        "events": events,
+        "placed": len(placed),
+        "matched": matched,
+        "unfilled": len(placed) - matched,
+        "fill_rate": round(100.0 * matched / len(placed), 1) if placed else None,
+        # Fills whose order predates the window. Counted separately so the
+        # fill rate above stays a like-for-like ratio of this window's orders.
+        "earlier_fills": sum(1 for e in events if e["kind"] == "fill" and not e["ref_id"]),
+        "closed": len(closed),
+        "wins": len(wins),
+        "losses": sum(1 for v in closed if v < 0),
+        "win_rate": round(100.0 * len(wins) / len(closed), 1) if closed else None,
+        "avg_pnl_pct": round(sum(closed) / len(closed), 2) if closed else None,
+        "best_pnl_pct": max(closed) if closed else None,
+        "worst_pnl_pct": min(closed) if closed else None,
+        "hit_target": sum(1 for v in closed if v >= 3.0),
+        "hit_stop": sum(1 for v in closed if v <= -5.0),
+    }
+
+
+def _event(order, fill) -> dict:
+    """One activity row. Every field is sourced from the record that holds it."""
+    src = order or fill
+    limit = order["limit_price"] if order else None
+    price = fill["price"] if fill else None
+    # Signed so that positive always means "better than the limit asked for",
+    # which is the opposite arithmetic on a buy and on a sell.
+    vs_limit = None
+    if limit and price:
+        vs_limit = round(100.0 * (limit - price) / limit, 3)
+        if src["side"] == "sell":
+            vs_limit = -vs_limit
+    at = fill["filled_at"] if fill else order["at"]
+    # Formatted here rather than in the browser: ET is what every other
+    # timestamp on the page and in the journal is stated in, and the client
+    # has no business guessing the market's timezone from the viewer's.
+    local = _utc(at)
+    local = local.astimezone(ET) if local else None
+    return {
+        "kind": "fill" if fill else "unfilled",
+        "symbol": src["symbol"],
+        "side": src["side"],
+        "quantity": src["quantity"],
+        "limit_price": limit,
+        "price": price,
+        "notional": order["notional"] if order else (
+            round((price or 0) * src["quantity"], 2)),
+        "at": at,
+        "date_et": local.strftime("%Y-%m-%d") if local else "",
+        "time_et": local.strftime("%H:%M") if local else "",
+        "placed_at": order["at"] if order else None,
+        "vs_limit_pct": vs_limit,
+        "pnl_pct": (fill or {}).get("pnl_pct"),
+        "note": (fill or {}).get("note") or "",
+        "ref_id": order["ref_id"] if order else None,
+        "order_id": fill["order_id"] if fill else None,
+    }
 
 
 # --------------------------------------------------------------------------
@@ -574,6 +708,7 @@ def snapshot(days: int = 7) -> dict:
         "journal": journal(days),
         "fills": fills(days),
         "orders": orders(days),
+        "activity": activity(days),
         "equity_curve": equity_curve(days),
     }
 

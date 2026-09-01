@@ -59,8 +59,25 @@ systemd timer (rh-token-refresh@USER.timer)
 
 A read-only web view of what the agent is doing: current positions with P&L
 against entry and distance to the −5% exit, account value, cash reserve and
-slot usage, and the last 7 days of journal entries rendered as a browsable
-decision log.
+slot usage, realized outcomes on closed trades, every order it placed with the
+reasoning it recorded, and the last 7 days of journal entries rendered as a
+browsable decision log.
+
+**Realized outcomes** answers the question the open-position chart cannot: is
+the +3%/−5% band actually holding? One column per closed trade, oldest to
+newest, on the same scale as the open-position chart so the two read together,
+with win rate, average return, best, worst and fill rate as stat tiles above it.
+
+**Order activity** joins `state/ledger.json` (what the agent placed) to
+`state/fills.jsonl` (what actually filled), so an order that never filled is
+visible as such rather than silently absent — the mandate is limit-orders-only,
+so the fill rate is a real property of the strategy. Expanding a row shows the
+note the agent wrote when it placed the order. The join is *inferred*: the two
+files share no key — the ledger records the client-side `ref_id` the agent
+generated, fills record the order id Robinhood assigned — so orders are matched
+to fills on symbol, side, quantity and time. Every displayed number comes from
+whichever file holds it, never from the join, so a mismatch would swap two
+notes rather than misstate a price.
 
 ```
 sudo ./scripts/setup-dashboard.sh          # install, then follow the printed steps

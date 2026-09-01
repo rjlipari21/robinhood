@@ -4,10 +4,10 @@
 Run:  python3 scripts/archive-journal.py [--dry-run]
 
 Why this exists: journal.md is append-only and the agent writes one entry per
-run, 13 runs a trading day. It passed 1.15MB / 22k lines / 245 entries inside
-two weeks. Nothing reads it whole -- run-context.sh tails 200 lines -- so size
-costs no tokens, but an unbounded single file is a poor record and a slow one to
-work with by hand.
+run -- 52 runs a trading day when the file grew, 7 since the move to an hourly
+cadence. It passed 1.15MB / 22k lines / 245 entries inside two weeks. Nothing
+reads it whole -- run-context.sh tails 200 lines -- so size costs no tokens, but
+an unbounded single file is a poor record and a slow one to work with by hand.
 
 Entries are delimited by level-2 headings and there are two historical formats,
 both carrying an ISO date:
@@ -40,8 +40,12 @@ JOURNAL = "state/journal.md"
 ARCHIVE_DIR = "state/archive"
 TITLE = "# Trading journal"
 
-# One full trading day at the current 30-minute cadence. Below this, a tail of
-# 200 lines is not guaranteed to reach a complete entry.
+# Below this, a tail of 200 lines is not guaranteed to reach a complete entry.
+# This was "one full trading day" when the cadence was every 30 minutes. The
+# cadence is now hourly, so a trading day is 7 entries and 13 buys nearly two
+# days instead of one. Deliberately not lowered to 7: the constant only sets
+# how much history survives archiving, retaining more is strictly safer for
+# run-context.sh, and the cost of holding an extra day is a few KB.
 MIN_LIVE_ENTRIES = 13
 
 HEADING = re.compile(r"^## ")

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # One scheduled trading run. Safe to invoke any time — exits quietly outside
-# Robinhood's regular/extended sessions (07:00-20:00 ET, Mon-Fri), when a run
-# is already in flight, or when the kill switch is set.
+# Robinhood's regular session (09:30-16:00 ET, Mon-Fri), when a run is already
+# in flight, or when the kill switch is set.
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,10 +14,12 @@ if [[ -f state/HALT ]]; then
   exit 0
 fi
 
-# Overlap guard. The timer fires every 15 minutes but a run can take longer than
-# that, and two agents trading the same account concurrently would double-size
-# positions and race on state/ledger.json. Non-blocking: if the lock is held,
-# this fire is dropped rather than queued behind the run in progress.
+# Overlap guard. The timer fires hourly, which is comfortably longer than an
+# observed run (the three measured Haiku runs took well under 30 minutes), but
+# two agents trading the same account concurrently would double-size positions
+# and race on state/ledger.json, so the guard stays regardless of headroom.
+# Non-blocking: if the lock is held, this fire is dropped rather than queued
+# behind the run in progress.
 exec {lockfd}<>state/.agent-run.lock
 if ! flock -n "$lockfd"; then
   echo "$(date -u +%FT%TZ) previous run still in flight — skipping"
@@ -30,11 +32,14 @@ fi
 # a Persistent= catch-up can still land outside it.
 #
 # Narrowed from 07:00-20:00 (regular + extended) on 2026-09-01, together with
-# the 15 -> 30 minute cadence, to cut Claude spend: ~52 runs/day became ~13.
-# The tradeoff is accepted deliberately -- nothing now manages positions
-# between 16:00 and 09:30 the next session, a 17.5-hour gap where the old
-# window left 11. Positions still gap across it exactly as they did overnight;
-# what is lost is the pre-market and post-market chance to react first.
+# a 15 -> 30 -> 60 minute cadence change the same day, to cut Claude spend:
+# ~52 runs/day became 13, then 7. The tradeoff is accepted deliberately --
+# nothing now manages positions between 16:00 and 09:30 the next session, a
+# 17.5-hour gap where the old window left 11. Positions still gap across it
+# exactly as they did overnight; what is lost is the pre-market and post-market
+# chance to react first. Note the window itself is unchanged by the move to
+# hourly: the last run is still 15:30 and the overnight gap is still 17.5h.
+# What hourly costs is intraday resolution, not overnight coverage.
 #
 # Two consequences worth knowing:
 #   * extended_hours is now unreachable in practice. config/limits.json still
@@ -68,6 +73,20 @@ LOG="logs/run-$(TZ=America/New_York date +%F).log"
   #   ------------------------------------
   #   30 runs                $77.15   = $2.57/run, ~$134/day at 52 runs
   #
+  # Post-pin, measured from the three Haiku 4.5 runs that executed at the
+  # 30-minute cadence on 2026-09-01 (18:31, 19:01, 19:31 UTC), per run:
+  #
+  #   cache reads   2.50M   $0.250   41%
+  #   cache writes  0.19M   $0.240   39%
+  #   output        23.7K   $0.118   19%
+  #   fresh input     375   $0.000    -
+  #   ------------------------------------
+  #   per run              ~$0.61    = ~$4.3/day at 7 runs (was ~$7.9 at 13)
+  #
+  # Turns on those runs were 54 / 43 / 39. The 54 would have blown the old 45
+  # ceiling, so the raise to 60 was necessary rather than margin -- and 54
+  # against 60 is thinner than the "should land in the 30s" note below implies.
+  #
   # Two things drive that, and neither is scan ingestion alone:
   #
   # 1. Cost = turns x resident context. Cache reads dominate because every turn
@@ -80,16 +99,19 @@ LOG="logs/run-$(TZ=America/New_York date +%F).log"
   #    schemas) expired between every run and was never once reused: ~$0.21/run
   #    of pure re-upload. A no-op run that did nothing still cost $0.28. `claude
   #    -p` gives no way to hold a warm prefix across runs, so this is a floor
-  #    until the harness changes -- and going to a 30-minute cadence makes the
-  #    gap wider, not narrower. It is the price of the process model.
+  #    until the harness changes -- and every widening of the cadence (15 -> 30
+  #    -> 60) widens the gap rather than closing it. It is the price of the
+  #    process model, and it does not scale down with run count: fewer runs cut
+  #    the total bill but not the per-run cold-start floor.
   #
   # Haiku 4.5 is exactly half Sonnet 5's rates on all four token classes, so
   # this pin alone halves the bill. Its 200K context was previously called a
-  # blocker; measured peak resident context is 155K, so there is real but not
-  # generous headroom. That is why --max-turns stays at 60 rather than rising,
-  # and why moving scan ingestion VM-side (hand the agent the ranked top 50
-  # instead of two ~85KB payloads) is the next change worth making: it buys
-  # margin under the 200K ceiling as well as tokens.
+  # blocker on the strength of a 155K peak-resident figure -- but that was
+  # measured pre-refactor on Sonnet 5. Measured peak on the three Haiku runs is
+  # ~80K, so headroom under the 200K ceiling is roughly 60%, not 22%. Moving
+  # scan ingestion VM-side is still worth doing on token cost, but the
+  # context-ceiling argument for it no longer holds, and --max-turns has more
+  # room to rise than the old figure suggested.
   #
   # --effort medium, not the default high: output was 25% of the bill at ~64K
   # tokens/run, most of it thinking, and most runs correctly place zero orders.

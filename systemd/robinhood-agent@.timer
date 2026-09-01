@@ -2,28 +2,31 @@
 Description=Run the Robinhood trading agent for %i during regular market hours
 
 [Timer]
-# Every 30 minutes across Robinhood's REGULAR session only, 09:30-16:00 ET
-# Mon-Fri: 09:30, 10:00, 10:30, ... 15:30. Thirteen runs per trading day.
+# Hourly on the half hour, anchored on the open, across Robinhood's REGULAR
+# session only. Mon-Fri: 09:30, 10:30, 11:30, 12:30, 13:30, 14:30, 15:30.
+# Seven runs per trading day.
 #
-# Narrowed on 2026-09-01 from "every 15 min, 07:00-20:00 ET" (~52 runs/day).
-# Measured Claude spend at that cadence was $2.57/run, ~$134/day against a
-# ~$1,000 account. Cadence is the bluntest lever on that bill -- it is pure
-# multiplication -- and the mandate already expects most runs to place zero
-# orders. Combined with the Haiku 4.5 pin in run-agent.sh, the first run after
-# the turn-count refactor measured $1.22 on Sonnet 5 / 27 turns, which is ~$0.61
-# at Haiku rates -- about $8/day, down from ~$134.
+# History: every 15 min / 07:00-20:00 ET (~52 runs/day) -> every 30 min /
+# 09:30-16:00 (13 runs/day) on 2026-09-01 -> hourly (7 runs/day) the same day,
+# on owner instruction. Cadence is the bluntest lever on Claude spend because
+# it is pure multiplication, and the mandate already expects most runs to place
+# zero orders. Measured cost on the three Haiku 4.5 runs that did execute at
+# the 30-minute cadence was ~$0.61/run, so 13 runs was ~$7.9/day and 7 runs is
+# ~$4.3/day. Down from a measured ~$134/day at the original cadence.
+#
+# Anchoring on the open is what makes this one line instead of two. The
+# 30-minute version needed a separate OnCalendar= for 09:30, because 09:30 is
+# not on a :00/:30 grid counted from 09:00 and a single expression would also
+# have fired at 09:00 pre-market. An hourly grid whose minute is fixed at :30
+# already starts at 09:30, so the special case disappears.
+#
+# Expressed in America/New_York so DST needs no maintenance.
 #
 # The overnight 24 Hour Market window is not covered, and neither are the
-# pre-market and post-market extended sessions any more. The session gate in
+# pre-market and post-market extended sessions. The session gate in
 # run-agent.sh is the authoritative check and skips anything this timer lets
 # through outside 09:30-16:00 ET.
-#
-# Expressed in America/New_York so DST needs no maintenance. Two lines because
-# 09:30 is not on a :00/:30 boundary from 09:00 -- systemd unions multiple
-# OnCalendar= entries, so this yields 09:30 plus 10:00-15:30 every 30 min
-# without also firing at 09:00 pre-market.
-OnCalendar=Mon..Fri 09:30 America/New_York
-OnCalendar=Mon..Fri 10..15:00/30 America/New_York
+OnCalendar=Mon..Fri 09..15:30 America/New_York
 Persistent=false
 
 [Install]

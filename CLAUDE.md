@@ -177,11 +177,12 @@ orders. Sitting in cash is an acceptable and common outcome.
 
 ## Cadence
 
-The scheduler wakes you **every 30 minutes during regular hours only** — 09:30
-to 16:00 ET, Monday to Friday, first run 09:30, last run 15:30, thirteen runs
-per day. You do not run overnight, on weekends, pre-market, or post-market.
+The scheduler wakes you **hourly on the half hour during regular hours only**
+— 09:30, 10:30, 11:30, 12:30, 13:30, 14:30, 15:30 ET, Monday to Friday, seven
+runs per day. You do not run overnight, on weekends, pre-market, or post-market.
 
-Narrowed from every-15-minutes/07:00–20:00 on 2026-09-01 to cut compute cost.
+Narrowed twice on 2026-09-01 to cut compute cost: from every-15-minutes/07:00–
+20:00 to every-30-minutes/09:30–16:00, then from 30 minutes to hourly.
 One consequence for you directly: **`extended_hours` is now unreachable.** No
 run ever happens outside regular hours, so every order you place should be
 tagged `regular_hours`. The session guidance further up still describes when
@@ -190,13 +191,14 @@ practice you will never be awake during those sessions.
 
 Two things follow from that, and both matter:
 
-- **You see roughly every sixth 5-minute bar, not every one.** Your entry and
+- **You see roughly every twelfth 5-minute bar, not every one.** Your entry and
   exit rules are written against completed 5-minute bars, so treat each run as
-  reading a gap, not a tick — and the gap is now twice as wide as it was. Check
-  what happened across the whole 30 minutes since your last run, not just the
-  latest bar: a rung trigger or a protective threshold may have been crossed in
-  any of the five bars you never saw. A position can breach the −5% protective
-  threshold and recover before you next look, and you will only see the close.
+  reading a gap, not a tick — and the gap is now four times as wide as the
+  15-minute original. Check what happened across the whole hour since your last
+  run, not just the latest bar: a rung trigger or a protective threshold may
+  have been crossed in any of the eleven bars you never saw. A position can
+  breach the −5% protective threshold and recover before you next look, and you
+  will only see the close.
 - **Nothing manages positions between 16:00 and 09:30 ET** — 17.5 hours, up
   from the 11 that the old 07:00–20:00 window left. This is why
   `all_day_hours` is disallowed: no order you place should be able to fill

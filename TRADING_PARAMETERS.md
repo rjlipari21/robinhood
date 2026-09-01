@@ -121,11 +121,12 @@ missing most dips, because 5-min RSI mean-reverts fast enough that a strict
 grinding-higher tape. Two changes fixed it: widen the dip trigger, and add a
 second path that buys confirmed strength instead of only buying weakness.
 
-Both widened thresholds still apply at the current 30-minute cadence, but note
+Both widened thresholds still apply at the current hourly cadence, but note
 what that cadence costs them. They were sized when polling landed on every
-5-minute bar boundary; at 30 minutes only one bar in six is seen, so a move
+5-minute bar boundary; at one hour only one bar in twelve is seen, so a move
 that starts and reverses inside the gap is invisible — not just an intra-bar
-extreme, but a whole six-bar excursion. The wide bands are what absorb that.
+extreme, but a whole twelve-bar excursion. The wide bands are what absorb that,
+and the gap they now have to absorb is four times the one they were sized for.
 If reversals inside the gap start costing real money, widening the bands again
 is the lever, not restoring the cadence.
 
@@ -235,15 +236,18 @@ is the lever, not restoring the cadence.
   ticker, so relevance is a judgement call, and items run up to ~2 weeks old.
 
 ## Cadence & reporting
-- Analysis/trade runs every 30 minutes during Robinhood's **regular session
-  only** — 09:30 to 16:00 ET, Monday to Friday, first run 09:30, last run
-  15:30. Thirteen runs per trading day. Each run may analyze, place, or cancel
+- Analysis/trade runs **hourly on the half hour** during Robinhood's **regular
+  session only** — 09:30, 10:30, 11:30, 12:30, 13:30, 14:30, 15:30 ET, Monday
+  to Friday. Seven runs per trading day. Each run may analyze, place, or cancel
   orders within the limits above.
-- Narrowed from every-15-minutes / 07:00–20:00 (~52 runs/day) on 2026-09-01,
-  on owner instruction, to cut Claude compute cost. Measured spend at the old
-  cadence was $2.57/run, ~$134/day against a ~$1,000 account; the new cadence
-  plus the Haiku 4.5 model pin is ~$8/day. This is an explicit owner decision
-  to trade monitoring frequency for cost, not a drift.
+- Narrowed twice on 2026-09-01, both times on owner instruction, to cut Claude
+  compute cost: from every-15-minutes / 07:00–20:00 (~52 runs/day) to
+  every-30-minutes / 09:30–16:00 (13 runs/day), then from 30 minutes to hourly
+  (7 runs/day). Measured spend at the original cadence was $2.57/run, ~$134/day
+  against a ~$1,000 account. Measured cost of the three Haiku 4.5 runs that
+  executed at the 30-minute cadence was ~$0.61/run, so 13 runs was ~$7.9/day
+  and 7 runs is ~$4.3/day. This is an explicit owner decision to trade
+  monitoring frequency for cost, not a drift.
 - Pre-market and post-market extended sessions are no longer covered. The
   agent is never awake outside regular hours, so **every order should be
   tagged `regular_hours`**; `extended_hours` remains accepted by
@@ -251,8 +255,8 @@ is the lever, not restoring the cadence.
 - The overnight 24 Hour Market window is NOT covered, and as of 2026-08-27 is
   not traded at all. Three consequences to hold in mind:
   - Entry and exit decisions read completed 5-minute bars, but the agent now
-    only sees them every sixth bar. A move that starts and reverses inside a
-    30-minute gap is invisible; the widened Path A/B trigger bands are what
+    only sees them every twelfth bar. A move that starts and reverses inside a
+    one-hour gap is invisible; the widened Path A/B trigger bands are what
     absorb that, and they were sized for a 15-minute gap — if reversals inside
     the gap start costing real money, widening them again is the lever.
   - Nothing manages positions between 16:00 and 09:30 ET — 17.5 unmonitored

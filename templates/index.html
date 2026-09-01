@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Robinhood AI Account</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="brand-mark">●</span>
+      <span class="brand-name">Robinhood AI Account</span>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-tab="overview" role="tab" aria-selected="true">Overview</button>
+      <button class="tab" data-tab="history" role="tab" aria-selected="false">Agent Decision History</button>
+    </nav>
+    <div class="topbar-right">
+      <span id="data-source-badge" class="badge badge-muted">Loading…</span>
+    </div>
+  </header>
+
+  <main>
+    <section id="panel-overview" class="panel active">
+      <div class="summary-grid">
+        <div class="card card-equity">
+          <div class="card-label">Account Equity</div>
+          <div id="equity-value" class="card-value">—</div>
+          <div id="equity-change" class="card-sub">—</div>
+          <svg id="equity-chart" class="equity-chart" viewBox="0 0 600 160" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="card">
+          <div class="card-label">Buying Power</div>
+          <div id="buying-power-value" class="card-value">—</div>
+          <div class="card-sub">Available cash</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Total Return</div>
+          <div id="total-return-value" class="card-value">—</div>
+          <div id="total-return-sub" class="card-sub">—</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Account</div>
+          <div id="account-number-value" class="card-value card-value-sm">—</div>
+          <div id="account-type-value" class="card-sub">—</div>
+        </div>
+      </div>
+
+      <div class="section-header">
+        <h2>Holdings</h2>
+      </div>
+      <div class="table-wrap">
+        <table id="positions-table" class="data-table">
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th>Name</th>
+              <th class="num">Qty</th>
+              <th class="num">Avg Cost</th>
+              <th class="num">Price</th>
+              <th class="num">Market Value</th>
+              <th class="num">Gain/Loss</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="panel-history" class="panel">
+      <div class="section-header history-header">
+        <h2>AI Agent Decision History</h2>
+        <div class="filters">
+          <select id="filter-symbol" aria-label="Filter by symbol">
+            <option value="">All symbols</option>
+          </select>
+          <select id="filter-action" aria-label="Filter by action">
+            <option value="">All actions</option>
+          </select>
+          <input id="filter-start" type="date" aria-label="Start date" />
+          <span class="filter-sep">to</span>
+          <input id="filter-end" type="date" aria-label="End date" />
+          <button id="filter-clear" class="btn-ghost">Clear</button>
+        </div>
+      </div>
+      <div id="decision-count" class="muted-note"></div>
+      <div class="table-wrap">
+        <table id="decisions-table" class="data-table decisions-table">
+          <thead>
+            <tr>
+              <th>Run Time</th>
+              <th>Symbol</th>
+              <th>Action</th>
+              <th class="num">Qty</th>
+              <th class="num">Price</th>
+              <th class="num">Confidence</th>
+              <th>Order Status</th>
+              <th>Rationale</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="load-more-wrap" class="load-more-wrap">
+        <button id="load-more" class="btn-ghost">Load more</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>

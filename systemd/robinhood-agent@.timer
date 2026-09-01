@@ -1,23 +1,29 @@
 [Unit]
-Description=Run the Robinhood trading agent for %i during regular/extended hours
+Description=Run the Robinhood trading agent for %i during regular market hours
 
 [Timer]
-# Every 15 minutes across Robinhood's regular + extended sessions, 07:00-20:00
-# ET Mon-Fri. The overnight 24 Hour Market window is deliberately NOT covered
-# any more -- see the session gate in run-agent.sh, which is the authoritative
-# check and skips anything this timer lets through outside those hours.
+# Every 30 minutes across Robinhood's REGULAR session only, 09:30-16:00 ET
+# Mon-Fri: 09:30, 10:00, 10:30, ... 15:30. Thirteen runs per trading day.
 #
-# Expressed in America/New_York so DST needs no maintenance: hours 07..19,
-# minutes 00/15/30/45, giving a last run at 19:45 ET.
+# Narrowed on 2026-09-01 from "every 15 min, 07:00-20:00 ET" (~52 runs/day).
+# Measured Claude spend at that cadence was $2.57/run, ~$134/day against a
+# ~$1,000 account. Cadence is the bluntest lever on that bill -- it is pure
+# multiplication -- and the mandate already expects most runs to place zero
+# orders. Combined with the Haiku 4.5 pin in run-agent.sh, the first run after
+# the turn-count refactor measured $1.22 on Sonnet 5 / 27 turns, which is ~$0.61
+# at Haiku rates -- about $8/day, down from ~$134.
 #
-# COST: ~52 invocations per trading day, each a `claude -p` run. Verify actual
-# spend after the first day before leaving it unattended.
+# The overnight 24 Hour Market window is not covered, and neither are the
+# pre-market and post-market extended sessions any more. The session gate in
+# run-agent.sh is the authoritative check and skips anything this timer lets
+# through outside 09:30-16:00 ET.
 #
-# A run that outlives its window does not stack: run-agent.sh takes a
-# non-blocking flock and exits when a run is already in flight. Without that,
-# systemd would queue a follow-up job for every fire and the agent would run
-# back-to-back forever.
-OnCalendar=Mon..Fri 07..19:00/15:00 America/New_York
+# Expressed in America/New_York so DST needs no maintenance. Two lines because
+# 09:30 is not on a :00/:30 boundary from 09:00 -- systemd unions multiple
+# OnCalendar= entries, so this yields 09:30 plus 10:00-15:30 every 30 min
+# without also firing at 09:00 pre-market.
+OnCalendar=Mon..Fri 09:30 America/New_York
+OnCalendar=Mon..Fri 10..15:00/30 America/New_York
 Persistent=false
 
 [Install]

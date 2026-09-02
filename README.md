@@ -51,6 +51,7 @@ systemd timer (rh-token-refresh@USER.timer)
 | `scripts/news-brief.py` | Fetches the news feed VM-side and prints headlines only, ~165 tokens/ticker against ~1,900 for the raw tool. |
 | `webapp/` | Read-only dashboard: positions, account state, and the agent's decision log. See below. |
 | `scripts/setup-dashboard.sh` | Installs the dashboard and cloudflared, then walks you through the tunnel. |
+| `systemd/cloudflared.service` | Tunnel unit. Runs locally-managed via `--config`; see the note under Dashboard. |
 | `scripts/test-dashboard.sh` | End-to-end dashboard check: data layer, HTTP surface, client rendering. |
 | `systemd/` | Templated units for the trading agent timer and the dashboard. |
 | `.mcp.json` | Registers the `robinhood-trading` HTTP MCP server for this repo. |
@@ -99,6 +100,23 @@ Two properties hold that up and neither is optional:
   request whose `Cf-Access-Authenticated-User-Email` header does not match. That
   header is only trustworthy *because* the origin is unreachable otherwise —
   which is why "temporarily" binding `0.0.0.0` to debug would make it forgeable.
+
+**Run the tunnel from `systemd/cloudflared.service`, not from `cloudflared
+service install`.** That command generates a unit using `tunnel run
+--token-file`, which is *remotely*-managed mode and silently ignores
+`/etc/cloudflared/config.yml` — the tunnel connects, reports `active`, and
+answers 503 to every request. The tracked unit passes `--config` explicitly,
+which is what selects local mode. After any change, check the ingress actually
+loaded rather than trusting `systemctl is-active`:
+
+```
+sudo cloudflared --config /etc/cloudflared/config.yml tunnel ingress validate
+sudo journalctl -u cloudflared -n 50 | grep -c 'No ingress rules'   # want 0
+curl -sI https://<your-host> | head -1                              # want a 302 to login
+```
+
+A 403 on that last check is *not* success: it means the origin refused you
+rather than the edge, so no Access policy is attached.
 
 The dashboard cannot trade. Its data layer can reach exactly five read-only
 Robinhood tools and rejects anything else before building a request, the HTTP

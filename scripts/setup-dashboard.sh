@@ -118,11 +118,22 @@ cat <<EOF
          - service: http_status:404
        YAML
 
-  d. Run it as a service:
+  d. Run it as a service. Install the unit from THIS REPO -- do not use
+     'cloudflared service install'. That command writes a unit that runs
+     'tunnel run --token-file', which is remotely-managed mode: it ignores the
+     config.yml you just wrote in step c and answers 503 to every request. The
+     only symptom is one WRN line, "No ingress rules were defined", in the
+     service log. This exact trap cost hours during setup.
 
-       sudo cloudflared service install
+       sudo install -m 644 systemd/cloudflared.service \\
+                           /etc/systemd/system/cloudflared.service
+       sudo systemctl daemon-reload
        sudo systemctl enable --now cloudflared
-       systemctl status cloudflared --no-pager
+
+     Then confirm the ingress actually loaded -- 'active' is not enough:
+
+       sudo cloudflared --config /etc/cloudflared/config.yml tunnel ingress validate
+       sudo journalctl -u cloudflared -n 50 | grep -c 'No ingress rules'   # want 0
 
   e. LOCK IT DOWN -- do this BEFORE you browse to the hostname. Until an
      Access policy exists, that URL is public to anyone who guesses it.
@@ -149,8 +160,16 @@ cat <<EOF
 
        curl -sI https://trading.example.com | head -1
 
-     Expect a redirect to a Cloudflare login, NOT a 200. A 200 means the
-     Access policy is not attached -- fix that before leaving this running.
+     Expect a 302 to a Cloudflare login. Anything else means the edge is not
+     authenticating and you are relying on the app check alone:
+
+       200  Access policy missing AND DASHBOARD_CF_EMAIL unset. Wide open.
+       403  The tunnel works and server.py refused you -- but the refusal came
+            from the ORIGIN, not the edge, so no Access policy is attached.
+            Not "secure enough": the whole reason the identity header can be
+            trusted is that Access sets it and overwrites any client copy.
+            With no policy in front, nothing is doing that overwriting.
+       503  Ingress not loaded -- see step d, you are probably in token mode.
 
 EOF
 

@@ -116,14 +116,17 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/snapshot":
-            days = 7
+            days, trades = 7, collect.TRADE_LIMIT
             if "?" in self.path:
                 for part in self.path.split("?", 1)[1].split("&"):
                     k, _, v = part.partition("=")
                     if k == "days" and v.isdigit():
                         days = max(1, min(90, int(v)))
+                    elif k == "trades" and v.isdigit():
+                        # 0 means "no cap": the join still runs over `days`.
+                        trades = max(0, min(500, int(v)))
             try:
-                payload = collect.snapshot(days)
+                payload = collect.snapshot(days, trades)
             except Exception as exc:        # never leak a traceback to the browser
                 self.log_message("snapshot failed: %s", type(exc).__name__)
                 payload = {"fatal": f"{type(exc).__name__} while collecting data"}

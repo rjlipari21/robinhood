@@ -49,6 +49,12 @@ ALLOWED_TOOLS = frozenset({
     "get_equity_orders",
 })
 
+# How much trade history the page shows. The journal, the decision log and the
+# equity curve stay on the day window -- those are runs, not trades, and a run
+# that placed nothing is still worth reading. This caps only the history of
+# orders and the cards derived from it.
+TRADE_LIMIT = 10
+
 CACHE_TTL = 60          # seconds; a browser refresh must not hammer Robinhood
 _cache: dict = {}
 
@@ -577,8 +583,17 @@ def _utc(ts: str):
         return None
 
 
-def activity(days: int = 7) -> dict:
+def activity(days: int = 7, limit: int = TRADE_LIMIT) -> dict:
     """Orders placed joined to the fills they produced, newest first.
+
+    THE JOIN RUNS OVER THE WHOLE WINDOW AND THE TRUNCATION HAPPENS AFTER, which
+    is the only order that works: an order placed on Monday can fill on
+    Tuesday, so a list built from the newest ten records first would strand
+    fills whose order was just outside the cut and report them as orderless.
+
+    Every summary number is then computed from the rows actually shown, not
+    from the window. A fill rate over 7 days printed above a list of 10 trades
+    would be a different denominator than the one the reader is looking at.
 
     THE JOIN IS INFERRED, and the wording on the page reflects that. The two
     records share no key: the ledger is written by the hook and keys on the
@@ -636,18 +651,32 @@ def activity(days: int = 7) -> dict:
     for f in got:
         f.pop("_claimed", None)
 
-    closed = [e["pnl_pct"] for e in events
+    total = len(events)
+    shown = events[:limit] if limit else events
+
+    # Re-derived from `shown` rather than carried down from the window: an
+    # order is "placed" here if it has a ledger row, and "matched" if that row
+    # also found its fill, which is the same distinction the window-wide count
+    # made -- just over the rows on the page.
+    on_page = sum(1 for e in shown if e["ref_id"])
+    filled = sum(1 for e in shown if e["kind"] == "fill" and e["ref_id"])
+
+    closed = [e["pnl_pct"] for e in shown
               if e["side"] == "sell" and e["pnl_pct"] is not None]
     wins = [v for v in closed if v > 0]
     return {
-        "events": events,
-        "placed": len(placed),
-        "matched": matched,
-        "unfilled": len(placed) - matched,
-        "fill_rate": round(100.0 * matched / len(placed), 1) if placed else None,
-        # Fills whose order predates the window. Counted separately so the
-        # fill rate above stays a like-for-like ratio of this window's orders.
-        "earlier_fills": sum(1 for e in events if e["kind"] == "fill" and not e["ref_id"]),
+        "events": shown,
+        "limit": limit,
+        # What the cap hid, so the page can say "10 of 37" rather than imply
+        # that ten is all there ever was.
+        "total_events": total,
+        "placed": on_page,
+        "matched": filled,
+        "unfilled": sum(1 for e in shown if e["kind"] == "unfilled"),
+        "fill_rate": round(100.0 * filled / on_page, 1) if on_page else None,
+        # Fills whose order predates the window, so no ledger row was joined.
+        # Counted separately to keep the fill rate a like-for-like ratio.
+        "earlier_fills": sum(1 for e in shown if e["kind"] == "fill" and not e["ref_id"]),
         "closed": len(closed),
         "wins": len(wins),
         "losses": sum(1 for v in closed if v < 0),
@@ -1242,14 +1271,15 @@ def decisions(days: int = 7, entries=None, acts=None) -> dict:
     }
 
 
-def snapshot(days: int = 7) -> dict:
+def snapshot(days: int = 7, trades: int = TRADE_LIMIT) -> dict:
     """Everything the dashboard renders, in one payload."""
     live = live_state()
     entries = journal(days)
-    acts = activity(days)
+    acts = activity(days, trades)
     return {
         "generated_at": datetime.now(PT).strftime("%Y-%m-%d %H:%M:%S PT"),
         "window_days": days,
+        "trade_limit": trades,
         "status": agent_status(),
         "portfolio": live["portfolio"],
         "positions": live["positions"],

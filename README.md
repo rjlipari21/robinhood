@@ -79,7 +79,19 @@ the +3%/−5% band actually holding? One column per closed trade, oldest to
 newest, on the same scale as the open-position chart so the two read together,
 with win rate, average return, best, worst and fill rate as stat tiles above it.
 
-**Order activity** joins `state/ledger.json` (what the agent placed) to
+**Order activity** shows the **10 most recent orders** — `webapp/collect.py`'s
+`TRADE_LIMIT`, overridable per request with `?trades=N`, or `?trades=0` for no
+cap. The day window still governs the journal, the decision log and the equity
+curve, because those are runs rather than trades and a run that placed nothing
+is still worth reading. Two details matter about the cap: it is applied *after*
+the order/fill join, since an order placed on Monday can fill on Tuesday and a
+list built from the ten newest records first would strand fills whose order fell
+just outside the cut; and every summary number — fill rate, win rate, realized
+averages, and the coverage bars on Decision inputs — is recomputed from the rows
+actually shown, because a 7-day fill rate printed above 10 trades is a different
+denominator than the one being looked at.
+
+It joins `state/ledger.json` (what the agent placed) to
 `state/fills.jsonl` (what actually filled), so an order that never filled is
 visible as such rather than silently absent — the mandate is limit-orders-only,
 so the fill rate is a real property of the strategy. Expanding a row shows the

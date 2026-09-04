@@ -168,6 +168,21 @@ for (const tag of ['details', 'summary', 'div']) {
 }
 chk(/#activity/.test('#activity') && byId('#actmeta').textContent.length > 0,
     'the meta line states how many orders filled');
+// When the cap bites, saying "10 orders" would imply ten is all there has ever
+// been. Every card built off the capped list has to say "N most recent of M".
+const capped = (snap.activity.total_events || 0) > nev;
+const scoped = [byId('#actmeta').textContent, byId('#realmeta').textContent,
+                byId('#srcmeta').innerHTML];
+if (capped) {
+  M.renderRealized(snap); M.renderSources(snap);
+  const re = new RegExp(`${nev} most recent of ${snap.activity.total_events}`);
+  const sc = [byId('#actmeta').textContent, byId('#realmeta').textContent,
+              byId('#srcmeta').innerHTML];
+  chk(sc.every(t => re.test(t)),
+      `all three trade cards say "${nev} most recent of ${snap.activity.total_events}"`);
+} else {
+  chk(scoped.every(t => t.length > 0), 'each trade card states its own scope');
+}
 // esc() renders undefined as the empty string, so a field renamed out from
 // under a template reads as a blank cell rather than the word "undefined" --
 // which is how a row lost its clock once. Assert the time is actually there.

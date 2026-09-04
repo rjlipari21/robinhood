@@ -47,6 +47,25 @@ print('   source descriptions quote the same caps')
 
 assert 'now_et' not in d['status'] and d['generated_at'].endswith('PT')
 print('   timestamps emitted in Pacific')
+
+# The cap must be applied AFTER the order/fill join, or a fill whose order sits
+# just outside the cut is reported as orderless. Truncating the uncapped join
+# must give exactly the capped list.
+a_all = collect.activity(7, 0)
+a_cap = collect.activity(7, 10)
+assert a_cap['events'] == a_all['events'][:10], 'the cap is not a suffix of the full join'
+assert len(a_cap['events']) <= 10 and a_cap['total_events'] == len(a_all['events'])
+print(f\"   trade history capped at {len(a_cap['events'])} of {a_cap['total_events']}, joined first\")
+
+# Every summary number has to count the rows on the page, not the window.
+ev = a_cap['events']
+assert a_cap['placed'] == sum(1 for e in ev if e['ref_id'])
+assert a_cap['matched'] == sum(1 for e in ev if e['kind'] == 'fill' and e['ref_id'])
+assert a_cap['unfilled'] == sum(1 for e in ev if e['kind'] == 'unfilled')
+assert a_cap['closed'] == sum(1 for e in ev
+                              if e['side'] == 'sell' and e['pnl_pct'] is not None)
+assert len(d['decisions']['orders']) == len(ev), 'decision inputs drifted from the history'
+print('   fill rate, win rate and decision inputs all count the shown rows')
 "
 
 echo "== 2. http surface =="

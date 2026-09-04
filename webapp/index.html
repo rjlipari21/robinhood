@@ -260,6 +260,7 @@ details.entry>summary:hover{background:color-mix(in srgb,var(--accent) 6%,transp
 
   <section class="card" style="margin-bottom:16px">
     <h2>Realized outcomes &mdash; closed trades</h2>
+    <div class="sub" id="realmeta"></div>
     <div class="stats" id="realkpis"></div>
     <div id="realchart"></div>
   </section>
@@ -329,6 +330,18 @@ const SIGN = n => n > 0 ? "▲" : n < 0 ? "▼" : "—";
 
 let DATA = null, FILTER = "all", ACTFILTER = "all", SRCFILTER = "all",
     EXPANDED = false;
+
+/* How much history the trade cards are showing. Said in one place because
+   three cards derive from the same capped list and must not describe it
+   differently -- and said as "N most recent of M" whenever the cap bit, since
+   "10 trades" alone would imply ten is all there has ever been. */
+function scopeLine(d){
+  const a = d.activity || {};
+  const shown = (a.events || []).length, tot = a.total_events || shown;
+  return tot > shown
+    ? `The ${shown} most recent of ${tot} orders in the last ${d.window_days} days`
+    : `${shown} order${shown === 1 ? "" : "s"} in the last ${d.window_days} days`;
+}
 
 /* ---- tooltip ----------------------------------------------------------- */
 const tip = $("#tip");
@@ -633,13 +646,14 @@ function drawRealized(el, trades){
 
 function renderRealized(d){
   const a = d.activity || {};
+  $("#realmeta").textContent = `${scopeLine(d)}, of which ${a.closed || 0} closed a position.`;
   const tile = (label, value, cls, foot) =>
     `<div class="kpi"><div class="label">${label}</div>
       <div class="value num ${cls||""}">${value}</div>
       <div class="foot">${foot}</div></div>`;
   const n = a.closed || 0;
   $("#realkpis").innerHTML = !n
-    ? tile("Closed trades", "0", "", `nothing realized in the last ${d.window_days} days`)
+    ? tile("Closed trades", "0", "", `nothing realized in this history`)
     : [
       tile("Win rate", `${a.win_rate.toFixed(1)}%`, "",
            `${a.wins} up, ${a.losses} down of ${n} closed`),
@@ -668,8 +682,8 @@ function renderActivity(d){
   const working = (d.open_orders || []).length;
 
   $("#actmeta").textContent =
-    `${a.matched || 0} of ${a.placed || 0} orders placed in the last ${d.window_days} days filled`
-    + (a.unfilled ? `; ${a.unfilled} never filled` : "")
+    `${scopeLine(d)} · ${a.matched || 0} of ${a.placed || 0} filled`
+    + (a.unfilled ? `, ${a.unfilled} never filled` : "")
     + (working ? `, and ${working} still working now` : "")
     + (a.earlier_fills ? `. ${a.earlier_fills} fill(s) came from orders placed before this window.` : ".");
 
@@ -770,7 +784,7 @@ function renderSources(d){
   const name = new Map(cov.map(c => [c.id, c.label]));
 
   $("#srcmeta").innerHTML =
-    `${all.length} order${all.length === 1 ? "" : "s"} in the last ${d.window_days} days`
+    `${scopeLine(d)}`
     + ` · ${dec.buys || 0} buys, ${dec.sells || 0} sells · each joined to the journal`
     + ` entry for the run that placed it`
     + (dec.unmatched_runs ? `, except ${dec.unmatched_runs} with no entry to match` : "")
@@ -1035,8 +1049,8 @@ function render(d){
   renderActivity(d); renderSources(d); renderGuidelines(d); renderLog(d); draw();
   const a = d.activity || {};
   $("#foot").textContent =
-    `Read-only. ${a.matched || 0} fills from ${a.placed || 0} orders placed and `
-    + `${a.closed || 0} closed trades in the window. `
+    `Read-only. ${a.matched || 0} fills from ${a.placed || 0} orders and `
+    + `${a.closed || 0} closed trades across this history. `
     + `All times Pacific. Live prices cached 60s; refreshes every 60s.`;
 }
 

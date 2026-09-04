@@ -1,0 +1,20 @@
+{
+  "account_number": "797887684",
+  "max_position_usd": 500.0,
+  "max_orders_per_day": 50,
+  "max_positions": 9,
+  "min_price_usd": 5.0,
+  "min_cash_reserve_pct": 10.0,
+  "circuit_breaker_value_usd": 850.0,
+  "allowed_sides": [
+    "buy",
+    "sell"
+  ],
+  "allowed_types": [
+    "limit"
+  ],
+  "allowed_market_hours": [
+    "extended_hours",
+    "regular_hours"
+  ]
+}

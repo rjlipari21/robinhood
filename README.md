@@ -61,8 +61,18 @@ systemd timer (rh-token-refresh@USER.timer)
 A read-only web view of what the agent is doing: current positions with P&L
 against entry and distance to the −5% exit, account value, cash reserve and
 slot usage, realized outcomes on closed trades, every order it placed with the
-reasoning it recorded, and the last 7 days of journal entries rendered as a
-browsable decision log.
+reasoning it recorded and the data sources behind it, the rules it trades
+under, and the last 7 days of journal entries rendered as a browsable decision
+log.
+
+**Every time on the page is Pacific.** The market, the mandate, the scheduler
+and the journal headings are all Eastern and stay that way — nothing about the
+agent moved — so the dashboard converts on the way out: order timestamps come
+off Robinhood in UTC, journal headings are parsed in the timezone they state
+(ET, or UTC on a handful of the oldest entries) and shifted, and each converted
+heading is shown with its original beside it, so an entry that says `15:30 ET`
+never looks as though it had been edited to say 12:30. The seven daily runs are
+06:30–12:30 PT, which is the same 09:30–15:30 ET the timer fires on.
 
 **Realized outcomes** answers the question the open-position chart cannot: is
 the +3%/−5% band actually holding? One column per closed trade, oldest to
@@ -79,6 +89,37 @@ generated, fills record the order id Robinhood assigned — so orders are matche
 to fills on symbol, side, quantity and time. Every displayed number comes from
 whichever file holds it, never from the join, so a mismatch would swap two
 notes rather than misstate a price.
+
+**Decision inputs** answers "why did it buy that?" without reading the whole
+journal: one row per data source the mandate puts in front of a decision —
+the two saved scanners, quotes, historicals, hourly RSI, book depth, session
+eligibility, the news screen, the earnings date, the pre-trade review, the
+prior-run journal and the hook itself — and per order, which of them are
+actually evidenced. Attribution is *earned*, not assumed: each order is joined
+to the journal entry for the run that placed it, that entry is searched for
+each source, and the matching line is quoted back so every claim on the card
+can be checked against the log below it. A citation inside a passage naming the
+ticker reads `in the passage naming it` — the unit of matching is a paragraph,
+so the quoted line may be a neighbour of the one naming the ticker, and the
+label claims only what was proved. The same source found elsewhere in the entry
+reads `elsewhere in the run`. Hook guardrails are evidenced differently and
+more strongly — a row in `state/ledger.json` exists only because the hook
+evaluated that order and let it through.
+
+The card is therefore a **lower bound**, and it is worded as one. The journal is
+prose: a source consulted but not written down reads as uncited, so the page
+says "not written down", never "not used". That still makes the coverage bars
+worth reading — a mandatory screen that is rarely written down is a real gap in
+the record even when the screen itself was run.
+
+**Agent guidelines** is the static half of the page: the rules the behaviour
+above is supposed to satisfy, which are otherwise only readable by opening
+`CLAUDE.md` on the VM. Each rule carries the layer that enforces it —
+`HOOK` rejected in code before the order reaches Robinhood, `AGENT` a check the
+hook cannot see and the agent must make against live account state each run —
+because anyone auditing a bad trade needs to know which kind was broken. The
+caps are read from `config/limits.json` at request time, the same file
+`hooks/guardrails.py` enforces, so the page cannot drift from the real limits.
 
 ```
 sudo ./scripts/setup-dashboard.sh          # install, then follow the printed steps

@@ -177,6 +177,48 @@ details.entry>summary:hover{background:color-mix(in srgb,var(--accent) 6%,transp
        margin-top:9px;overflow-wrap:anywhere}
 .symtick{font-size:10px}
 
+/* decision inputs ------------------------------------------------------- */
+.srcrow{padding:12px 0;border-top:1px solid var(--grid)}
+.srcrow:first-child{border-top:0;padding-top:2px}
+.srchead{display:flex;flex-wrap:wrap;gap:8px;align-items:baseline}
+.srchead code{font-family:var(--mono);font-size:11.5px;color:var(--ink-muted)}
+.srcwhat{font-size:12.5px;color:var(--ink-2);margin-top:3px;max-width:70ch}
+.srcbars{display:grid;gap:12px;grid-template-columns:1fr 1fr;margin-top:9px;
+         max-width:440px}
+.srcbars .lab{font-size:10.5px;color:var(--ink-muted);text-transform:uppercase;
+              letter-spacing:.05em}
+.srcbars b{font-variant-numeric:tabular-nums;color:var(--ink-1)}
+/* Tier is a category, not a ranking -- which record evidenced a source says
+   nothing about how good the source was -- so it rides on a glyph and a phrase
+   as well as the border. The label itself stays in ink at every tier: an 11px
+   line in --accent is 4.3:1 on the light surface, and the border carries the
+   same distinction at no cost to legibility. */
+.tierchip{display:inline-flex;align-items:center;gap:5px;font-size:11px;
+          padding:2px 8px;border-radius:999px;border:1px solid var(--hairline);
+          color:var(--ink-2);white-space:nowrap}
+.tierchip i{font-style:normal;flex:none}
+.tierchip.direct{border-color:color-mix(in srgb,var(--accent) 55%,transparent)}
+.tierchip.direct i{color:var(--accent)}
+.tierchip.ledger{border-color:color-mix(in srgb,var(--good) 45%,transparent)}
+.tierchip.ledger i{color:var(--good)}
+.tierchip.none{border-style:dashed}
+.evid{list-style:none;margin:10px 0 0;padding:0}
+.evid li{padding:7px 0;border-top:1px solid var(--grid);font-size:12.5px}
+.evid .q{color:var(--ink-2);overflow-wrap:anywhere;display:block;margin-top:3px}
+.evid .lbl{font-weight:650;color:var(--ink-1)}
+.chipwrap{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+
+/* guidelines ------------------------------------------------------------ */
+.gtitle{font-size:12px;text-transform:uppercase;letter-spacing:.05em;
+        color:var(--ink-muted);margin:16px 0 2px;font-weight:650}
+.rules{list-style:none;margin:0;padding:0}
+.rules li{display:flex;gap:10px;align-items:baseline;padding:6px 0;
+          border-top:1px solid var(--grid);font-size:13px;color:var(--ink-2)}
+.layer{font-size:9.5px;font-weight:700;letter-spacing:.04em;padding:1px 5px;
+       border-radius:4px;border:1px solid currentColor;flex:none;min-width:46px;
+       text-align:center;font-style:normal}
+.layer.hook{color:var(--accent)} .layer.agent{color:var(--ink-muted)}
+
 .banner{border-radius:9px;padding:10px 13px;margin-bottom:14px;font-size:13px;
         border:1px solid}
 .banner.crit{border-color:var(--critical);
@@ -235,7 +277,22 @@ details.entry>summary:hover{background:color-mix(in srgb,var(--accent) 6%,transp
     <div id="activity"></div>
   </section>
 
-  <section class="card">
+  <section class="card" style="margin-bottom:16px">
+    <div style="display:flex;justify-content:space-between;align-items:center;
+                flex-wrap:wrap;gap:10px;margin-bottom:4px">
+      <h2 style="margin:0">Decision inputs &mdash; the data behind each order</h2>
+      <div class="chips">
+        <button id="sAll"  aria-pressed="true">All orders</button>
+        <button id="sBuy"  aria-pressed="false">Buys</button>
+        <button id="sSell" aria-pressed="false">Sells</button>
+      </div>
+    </div>
+    <div class="sub" id="srcmeta"></div>
+    <div id="srccov"></div>
+    <div id="srclist"></div>
+  </section>
+
+  <section class="card" style="margin-bottom:16px">
     <div style="display:flex;justify-content:space-between;align-items:center;
                 flex-wrap:wrap;gap:10px;margin-bottom:4px">
       <h2 style="margin:0">Decision log</h2>
@@ -247,6 +304,12 @@ details.entry>summary:hover{background:color-mix(in srgb,var(--accent) 6%,transp
     </div>
     <div class="sub" id="logmeta"></div>
     <div id="log"></div>
+  </section>
+
+  <section class="card">
+    <h2>Agent guidelines &mdash; the rules every run trades under</h2>
+    <div class="sub" id="gmeta"></div>
+    <div id="guide"></div>
   </section>
 
   <div class="foot" id="foot"></div>
@@ -264,7 +327,8 @@ const money = n => (n < 0 ? "-" : "") + "$" +
 const pct = n => (n > 0 ? "+" : n < 0 ? "−" : "") + Math.abs(n).toFixed(2) + "%";
 const SIGN = n => n > 0 ? "▲" : n < 0 ? "▼" : "—";
 
-let DATA = null, FILTER = "all", ACTFILTER = "all", EXPANDED = false;
+let DATA = null, FILTER = "all", ACTFILTER = "all", SRCFILTER = "all",
+    EXPANDED = false;
 
 /* ---- tooltip ----------------------------------------------------------- */
 const tip = $("#tip");
@@ -557,7 +621,7 @@ function drawRealized(el, trades){
     const t = trades[+node.dataset.i];
     node.style.cursor = "crosshair";
     node.addEventListener("mousemove", e => showTip(e, t.symbol, [
-      `${t.date_et} ${t.time_et} ET`,
+      `${t.date_pt} ${t.time_pt} PT`,
       `sold ${t.quantity} @ ${money(t.price)}`,
       `realized ${pct(t.pnl_pct)}`,
       t.pnl_pct <= -5 ? "⚠ protective exit" : t.pnl_pct >= 3 ? "profit target" : "",
@@ -616,8 +680,8 @@ function renderActivity(d){
 
   const byDay = new Map();
   for (const e of list){
-    if (!byDay.has(e.date_et)) byDay.set(e.date_et, []);
-    byDay.get(e.date_et).push(e);
+    if (!byDay.has(e.date_pt)) byDay.set(e.date_pt, []);
+    byDay.get(e.date_pt).push(e);
   }
   let html = "";
   for (const [day, evs] of byDay){
@@ -637,7 +701,7 @@ function renderActivity(d){
         : `<span class="ebadge">unfilled</span>`;
       html += `<details class="entry">
         <summary>
-          <span class="etime">${esc(e.time_et)}</span>
+          <span class="etime">${esc(e.time_pt)}</span>
           <span class="side ${e.side === "buy" ? "buy" : "sell"}">${esc(e.side.toUpperCase())}</span>
           <span class="sym">${esc(e.symbol)}</span>
           <span class="efill">${px}</span>
@@ -662,6 +726,151 @@ function renderActivity(d){
     }
   }
   $("#activity").innerHTML = html;
+}
+
+/* ---- decision inputs ---------------------------------------------------
+   Which data source fed which order, evidenced rather than asserted. The
+   agent names its inputs in the journal entry for the run ("hourly RSI 25.0",
+   "ran both saved scans"), so the data layer joins each order to its run and
+   quotes the line back here. Two consequences the wording has to respect:
+   every claim on this card is checkable against the log below, and the card
+   is a LOWER BOUND -- the journal is prose, so a source consulted but not
+   written down reads as uncited. Nothing here says "not used".
+
+   Tier is a category, not a ranking, so it rides on a glyph and a phrase and
+   not on colour: which record proved a source says nothing about whether the
+   source was any good.
+------------------------------------------------------------------------ */
+const TIER = {
+  // "in the passage naming it" and not "on the line about it": attribution is
+  // per paragraph, so the quoted line can be a neighbour inside a passage that
+  // does name this ticker. The label claims exactly what was proved.
+  direct: ["◆", "in the passage naming it"],
+  run:    ["◇", "elsewhere in the run"],
+  ledger: ["✓", "proved by the ledger row"],
+};
+
+function srcBar(side, cell){
+  if (!cell || !cell.applies)
+    return `<div><div class="lab">${side}s</div>
+      <div class="sub">none in this window</div></div>`;
+  return `<div>
+    <div class="lab">${side}s${cell.required ? " · required" : ""}</div>
+    <div><b>${cell.cited} / ${cell.applies}</b>
+      <span class="sub">cited${cell.pct != null ? ` · ${cell.pct.toFixed(0)}%` : ""}</span></div>
+    <div class="meter"><i style="width:${cell.pct || 0}%"></i></div>
+  </div>`;
+}
+
+function renderSources(d){
+  const dec = d.decisions || {};
+  const cov = dec.coverage || [];
+  const all = dec.orders || [];
+  const list = SRCFILTER === "all" ? all : all.filter(o => o.side === SRCFILTER);
+  const name = new Map(cov.map(c => [c.id, c.label]));
+
+  $("#srcmeta").innerHTML =
+    `${all.length} order${all.length === 1 ? "" : "s"} in the last ${d.window_days} days`
+    + ` · ${dec.buys || 0} buys, ${dec.sells || 0} sells · each joined to the journal`
+    + ` entry for the run that placed it`
+    + (dec.unmatched_runs ? `, except ${dec.unmatched_runs} with no entry to match` : "")
+    + `. A source is listed when the run's entry or the fill note names it, and the`
+    + ` line is quoted so the attribution can be checked — the journal is prose, so`
+    + ` an uncited source means it was not written down, not that it was not consulted.`;
+
+  $("#srccov").innerHTML = cov.map(c => `
+    <div class="srcrow">
+      <div class="srchead">
+        <span class="sym">${esc(c.label)}</span>
+        <code>${esc(c.origin)}</code>
+        ${c.sides.length === 1
+          ? `<span class="tierchip none"><i>○</i>${esc(c.sides[0])}s only</span>` : ""}
+      </div>
+      <div class="srcwhat">${esc(c.provides)} — feeds ${esc(c.feeds)}.</div>
+      <div class="srcbars">${srcBar("buy", c.buy)}${srcBar("sell", c.sell)}</div>
+    </div>`).join("");
+
+  if (!list.length){
+    $("#srclist").innerHTML = '<div class="empty">No orders in this window.</div>';
+    return;
+  }
+
+  let html = `<div class="daybar"><h3>Per order</h3>
+    <span class="sub">${list.length} order${list.length > 1 ? "s" : ""},
+    newest first · times Pacific</span></div>`;
+  for (const o of list){
+    const n = o.cited.length, tot = n + o.missing.length;
+    const chips = o.cited.map(c => {
+      const t = TIER[c.tier] || TIER.run;
+      return `<span class="tierchip ${esc(c.tier)}"><i>${t[0]}</i>${
+        esc(name.get(c.id) || c.id)}</span>`;
+    }).join("") + o.missing.map(id =>
+      `<span class="tierchip none"><i>○</i>${esc(name.get(id) || id)}${
+        o.missing_required.includes(id) ? " · required" : ""}</span>`).join("");
+
+    html += `<details class="entry">
+      <summary>
+        <span class="etime">${esc(o.time_pt)}</span>
+        <span class="side ${o.side === "buy" ? "buy" : "sell"}">${esc(o.side.toUpperCase())}</span>
+        <span class="sym">${esc(o.symbol)}</span>
+        <span class="efill">${n} of ${tot} inputs evidenced${
+          o.run ? ` · ${esc(o.date_pt)} run ${esc(o.run.time)} PT${
+            o.run.as_written ? ` (${esc(o.run.as_written)})` : ""}` : ""}</span>
+        ${!o.run ? `<span class="ebadge">no journal entry</span>`
+          : n === tot ? `<span class="ebadge act">fully documented</span>`
+          : `<span class="ebadge">journal matched</span>`}
+      </summary>
+      <div class="ebody">
+        <div class="chipwrap">${chips}</div>
+        ${o.run ? `<h4>From the run’s entry</h4>
+          <div class="enote">${inline(o.run.title || "")}</div>` : ""}
+        <ul class="evid">${o.cited.map(c => {
+          const t = TIER[c.tier] || TIER.run;
+          return `<li><span class="lbl">${esc(name.get(c.id) || c.id)}</span>
+            <span class="sub">${t[0]} ${esc(t[1])}</span>
+            <span class="q">${esc(c.quote)}</span></li>`;
+        }).join("")}</ul>
+        ${o.missing.length ? `<h4>Not written down</h4>
+          <div class="enote sub">${o.missing.map(id => esc(name.get(id) || id)).join(", ")}.
+          ${o.missing_required.length
+            ? `The mandate makes ${o.missing_required.length} of these mandatory on a
+               ${esc(o.side)} — undocumented, which is not the same as not done.`
+            : "Not required for this side of a trade."}</div>` : ""}
+        <div class="emeta">${esc(o.key_kind)} ${esc(o.key)}</div>
+      </div>
+    </details>`;
+  }
+  $("#srclist").innerHTML = html;
+}
+
+/* ---- static guidelines -------------------------------------------------
+   Not behaviour: the rules the behaviour above is supposed to satisfy, which
+   are otherwise only readable by opening CLAUDE.md on the VM. The layer badge
+   is the load-bearing part — a hook rule is rejected in code before the order
+   reaches Robinhood, an agent rule is one the hook cannot see and the agent
+   has to enforce against live account state — so anyone auditing a bad trade
+   can tell which kind was broken. Numbers come from config/limits.json, read
+   at request time rather than restated here.
+------------------------------------------------------------------------ */
+function renderGuidelines(d){
+  const g = d.guidelines || {}, c = g.counts || {};
+  $("#gmeta").innerHTML =
+    `<b>${c.hook || 0}</b> of these are enforced in code by the order hook and cannot`
+    + ` be bypassed — a rejected order never reaches Robinhood. The other`
+    + ` <b>${c.agent || 0}</b> the agent must enforce itself each run, because the hook`
+    + ` cannot see account state. Caps are read from <code>config/limits.json</code>,`
+    + ` the same file the hook enforces, so this cannot drift from it.`;
+  $("#guide").innerHTML = (g.groups || []).map(grp => `
+    <div class="gtitle">${esc(grp.title)}</div>
+    <ul class="rules">${grp.rules.map(r => `
+      <li><span class="layer ${r.layer === "hook" ? "hook" : "agent"}">${
+        r.layer === "hook" ? "HOOK" : "AGENT"}</span>
+        <span>${esc(r.text)}</span></li>`).join("")}</ul>`).join("")
+    + `<div class="legend" style="margin-top:14px">
+        <span><i class="layer hook">HOOK</i> rejected by <code>hooks/guardrails.py</code></span>
+        <span><i class="layer agent">AGENT</i> the agent's own check, verified against
+          Robinhood each run</span>
+       </div>`;
 }
 
 function renderKPIs(d){
@@ -715,8 +924,9 @@ function renderChips(d){
     c.push(chip("crit","var(--critical)","<b>Circuit breaker</b> — under $850"));
   if (st.last_run)
     c.push(chip(st.last_rc === 0 ? "" : "warn", null,
-      `Last run <b>${esc(st.last_run.replace("T"," ").replace("Z"," UTC"))}</b> rc=${st.last_rc}`));
-  c.push(chip("", null, esc(st.cadence || "")));
+      `Last run <b>${esc(st.last_run)} PT</b> rc=${st.last_rc}`));
+  c.push(chip("", null, esc(st.cadence || "")
+    + (st.cadence_et ? ` <span class="sub">(${esc(st.cadence_et)})</span>` : "")));
   c.push(`<button id="themeBtn" title="Toggle light and dark">◐</button>`);
   $("#chips").innerHTML = c.join("");
   $("#themeBtn").onclick = () => {
@@ -772,9 +982,11 @@ function renderTable(d){
 function renderLog(d){
   const all = d.journal || [];
   const list = FILTER === "act" ? all.filter(e => e.orders_placed > 0) : all;
-  $("#logmeta").textContent =
+  $("#logmeta").innerHTML =
     `${list.length} of ${all.length} entries over the last ${d.window_days} days`
-    + (FILTER === "act" ? " (runs that placed at least one order)" : "");
+    + (FILTER === "act" ? " (runs that placed at least one order)" : "")
+    + `. Headings are written on the market's clock; the times shown are those`
+    + ` converted to Pacific, with the original beside them.`;
 
   if (!list.length){ $("#log").innerHTML = '<div class="empty">Nothing in this window.</div>'; return; }
 
@@ -797,6 +1009,7 @@ function renderLog(d){
         <summary>
           <span class="etime">${esc(e.time)}</span>
           <span class="etitle">${inline(e.title || e.heading)}</span>
+          ${e.time_as_written ? `<span class="ebadge">${esc(e.time_as_written)}</span>` : ""}
           ${e.orders_placed ? `<span class="ebadge act">${e.orders_placed} order${e.orders_placed>1?"s":""}</span>`
                             : `<span class="ebadge">no orders</span>`}
         </summary>
@@ -819,12 +1032,12 @@ function render(d){
   $("#subtitle").textContent =
     `account 797887684 · ${d.positions ? d.positions.length : 0} positions · data as of ${d.generated_at || "?"}`;
   renderChips(d); renderBanners(d); renderKPIs(d); renderTable(d);
-  renderActivity(d); renderLog(d); draw();
+  renderActivity(d); renderSources(d); renderGuidelines(d); renderLog(d); draw();
   const a = d.activity || {};
   $("#foot").textContent =
     `Read-only. ${a.matched || 0} fills from ${a.placed || 0} orders placed and `
     + `${a.closed || 0} closed trades in the window. `
-    + `Live prices cached 60s; refreshes every 60s.`;
+    + `All times Pacific. Live prices cached 60s; refreshes every 60s.`;
 }
 
 async function load(){
@@ -849,6 +1062,12 @@ $("#aAll").onclick = () => { ACTFILTER="all";
 $("#aFill").onclick = () => { ACTFILTER="fill";
   $("#aFill").setAttribute("aria-pressed","true"); $("#aAll").setAttribute("aria-pressed","false");
   renderActivity(DATA); };
+const srcBtns = {all:"#sAll", buy:"#sBuy", sell:"#sSell"};
+for (const [k, sel] of Object.entries(srcBtns))
+  $(sel).onclick = () => { SRCFILTER = k;
+    for (const [k2, s2] of Object.entries(srcBtns))
+      $(s2).setAttribute("aria-pressed", String(k2 === k));
+    renderSources(DATA); };
 $("#fExp").onclick = () => { EXPANDED = !EXPANDED;
   $("#fExp").textContent = EXPANDED ? "Collapse all" : "Expand all"; renderLog(DATA); };
 

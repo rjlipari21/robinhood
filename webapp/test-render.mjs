@@ -51,7 +51,7 @@ global.innerWidth = 1200;
 global.innerHeight = 900;
 global.matchMedia = () => ({ matches: false });
 
-const M = new Function(src + '; return {drawPL, drawCurve, drawRealized, renderRealized, renderActivity, md, inline, pct, money};')();
+const M = new Function(src + '; return {drawPL, drawCurve, drawRealized, renderRealized, renderActivity, renderSources, renderGuidelines, md, inline, pct, money};')();
 const snap = JSON.parse(fs.readFileSync(snapPath, 'utf8'));
 
 let fails = 0;
@@ -168,19 +168,121 @@ for (const tag of ['details', 'summary', 'div']) {
 }
 chk(/#activity/.test('#activity') && byId('#actmeta').textContent.length > 0,
     'the meta line states how many orders filled');
+// esc() renders undefined as the empty string, so a field renamed out from
+// under a template reads as a blank cell rather than the word "undefined" --
+// which is how a row lost its clock once. Assert the time is actually there.
+const rowTime = h => [...h.matchAll(/class="etime">([^<]*)</g)].map(m => m[1]);
+const at = rowTime(act);
+chk(at.length === nev && at.every(t => /^\d\d:\d\d$/.test(t)),
+    `every activity row shows its Pacific time (${at.filter(t => /^\d\d:\d\d$/.test(t)).length}/${nev})`);
 
 // Fill notes are agent-written prose rendered into HTML, and a note quotes
 // whatever the agent read -- headlines included. Escaping is the only thing
 // standing between that and markup on a page showing account data.
 M.renderActivity({ window_days: 7, open_orders: [], activity: { placed: 1, matched: 1,
   events: [{ kind: 'fill', symbol: '<b>X</b>', side: 'buy', quantity: 1, limit_price: 5,
-             price: 5, notional: 5, at: 'x', date_et: '2026-01-01', time_et: '10:00',
+             price: 5, notional: 5, at: 'x', date_pt: '2026-01-01', time_pt: '10:00',
              vs_limit_pct: 0, pnl_pct: null, ref_id: 'r"1', order_id: null,
              note: '<img src=x onerror=alert(1)><script>alert(2)<\/script>' }] } });
 const evil2 = byId('#activity').innerHTML;
 chk(!/<img/i.test(evil2) && /&lt;img/.test(evil2), 'fill notes are escaped, not rendered');
 chk(!/<script/i.test(evil2), 'script tags in a note cannot survive');
 chk(!/<b>X<\/b>/.test(evil2), 'a hostile symbol is escaped too');
+
+/* ---- decision inputs --------------------------------------------------- */
+console.log('\nDecision inputs');
+M.renderSources(snap);
+const cov = byId('#srccov').innerHTML;
+const srcl = byId('#srclist').innerHTML;
+const dec = snap.decisions || {};
+const nsrc = (dec.coverage || []).length;
+const nord = (dec.orders || []).length;
+chk(nsrc > 0, `source catalogue rendered (${nsrc} sources)`);
+chk((cov.match(/class="srcrow"/g) || []).length === nsrc, `one row per source (${nsrc})`);
+chk(!/NaN|undefined|\bnull\b/.test(cov), 'coverage rows carry no NaN/undefined/null');
+// A meter wider than its track would overstate coverage, which is the one
+// number on this card that must not be flattering.
+const widths = [...cov.matchAll(/width:([\d.]+)%/g)].map(m => +m[1]);
+chk(widths.every(w => w >= 0 && w <= 100), `meter widths stay in 0..100% (${widths.length} bars)`);
+chk((srcl.match(/<details/g) || []).length === nord, `one row per order (${nord})`);
+chk(!/NaN|undefined/.test(srcl), 'per-order rows carry no NaN/undefined');
+for (const tag of ['details', 'summary', 'ul', 'li', 'div']) {
+  const o = (srcl.match(new RegExp(`<${tag}[ >]`, 'g')) || []).length;
+  const c = (srcl.match(new RegExp(`</${tag}>`, 'g')) || []).length;
+  chk(o === c, `<${tag}> tags balanced across the order list (${o}/${c})`);
+}
+// Every citation must be checkable: a chip with no quoted line behind it is a
+// claim the reader cannot verify against the log.
+const totalCited = (dec.orders || []).reduce((a, o) => a + o.cited.length, 0);
+chk((srcl.match(/class="q"/g) || []).length === totalCited,
+    `every citation quotes its source line (${totalCited})`);
+chk((dec.orders || []).every(o => o.cited.length + o.missing.length > 0),
+    'every order accounts for each source that applies to its side');
+const st = rowTime(srcl);
+chk(st.length === nord && st.every(t => /^\d\d:\d\d$/.test(t)),
+    `every decision row shows its Pacific time (${st.filter(t => /^\d\d:\d\d$/.test(t)).length}/${nord})`);
+
+// The quoted lines are journal prose -- a third path by which agent-written
+// text, and whatever headline it quoted, reaches this page as HTML.
+M.renderSources({ window_days: 7, decisions: {
+  buys: 1, sells: 0, unmatched_runs: 0,
+  coverage: [{ id: 'news', label: '<b>Src</b>', origin: 'x"y', provides: 'p', feeds: 'f',
+               sides: ['buy'], required: ['buy'],
+               buy: { applies: 1, cited: 1, direct: 1, pct: 100, required: true },
+               sell: { applies: 0, cited: 0, direct: 0, pct: null, required: false } }],
+  orders: [{ key: 'r"1', key_kind: 'ref_id', symbol: '<i>Z</i>', side: 'buy',
+             date_pt: '2026-01-01', time_pt: '10:00',
+             run: { date: '2026-01-01', time: '10:00', as_written: '13:00 ET',
+                    title: 'ok' },
+             cited: [{ id: 'news', tier: 'direct',
+                       quote: '<img src=x onerror=alert(1)><script>alert(2)<\/script>' }],
+             missing: [], missing_required: [] }] } });
+const evil3 = byId('#srclist').innerHTML + byId('#srccov').innerHTML;
+chk(!/<img/i.test(evil3) && /&lt;img/.test(evil3), 'quoted journal lines are escaped, not rendered');
+chk(!/<script/i.test(evil3), 'script tags in a quoted line cannot survive');
+chk(!/<i>Z<\/i>/.test(evil3), 'a hostile symbol is escaped here too');
+
+/* ---- static guidelines ------------------------------------------------- */
+console.log('\nAgent guidelines');
+M.renderGuidelines(snap);
+const guide = byId('#guide').innerHTML;
+const g = snap.guidelines || {};
+const nrules = (g.groups || []).reduce((a, x) => a + x.rules.length, 0);
+chk((g.groups || []).length > 0, `${(g.groups || []).length} rule groups rendered`);
+chk((guide.match(/<li>/g) || []).length === nrules, `one line per rule (${nrules})`);
+// The layer badge is the load-bearing distinction on this card, so every rule
+// must carry one and the two counts must add up to the whole set.
+chk((guide.match(/class="layer /g) || []).length === nrules + 2,
+    'every rule carries a HOOK/AGENT badge, plus the two in the legend');
+chk((g.counts.hook + g.counts.agent) === nrules,
+    `the stated split (${g.counts.hook} hook / ${g.counts.agent} agent) covers all ${nrules} rules`);
+// The caps are read from config/limits.json; a stale hard-coded copy on the
+// page would misstate what the agent is actually trading under.
+const lim = g.limits || {};
+chk(guide.includes('$' + lim.max_position_usd.toLocaleString('en-US')),
+    `the position cap on the page matches limits.json ($${lim.max_position_usd})`);
+chk(guide.includes(String(lim.max_positions)) && guide.includes(String(lim.max_orders_per_day)),
+    'the position and daily-order caps come from limits.json');
+chk(!/NaN|undefined/.test(guide), 'guideline rules carry no NaN/undefined');
+
+/* ---- Pacific ----------------------------------------------------------- */
+console.log('\nTimezone');
+// Every displayed time is Pacific. ET still exists in the payload, but only as
+// the "as written" string beside a converted journal heading.
+chk(/PT$/.test(snap.status.now_pt || '') && /PT$/.test(snap.generated_at || ''),
+    'the payload stamps itself in Pacific');
+chk(!('now_et' in snap.status) && !/ ET$/.test(snap.generated_at || ''),
+    'no ET timestamp is emitted as the page clock');
+chk((snap.activity.events || []).every(e => 'date_pt' in e && !('date_et' in e)),
+    'order timestamps are converted to Pacific in the data layer');
+chk((snap.journal || []).every(e => !e.time || /^\d\d:\d\d$/.test(e.time)),
+    'journal headings parse to a converted HH:MM');
+const withEt = (snap.journal || []).filter(e => /ET/.test(e.time_as_written || ''));
+chk(withEt.length === 0 || withEt.every(e => {
+  const [hh, mm] = e.time.split(':').map(Number);
+  const wh = +e.time_as_written.split(':')[0];
+  return ((wh - hh + 24) % 24) === 3 && mm === +e.time_as_written.split(':')[1].slice(0, 2);
+}), `ET headings are shifted exactly 3 hours to Pacific (${withEt.length} entries)`);
 
 /* ---- markdown ---------------------------------------------------------- */
 console.log('\nMarkdown renderer');

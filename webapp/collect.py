@@ -52,7 +52,28 @@ ALLOWED_TOOLS = frozenset({
 CACHE_TTL = 60          # seconds; a browser refresh must not hammer Robinhood
 _cache: dict = {}
 
-ET = timezone(timedelta(hours=-4))      # America/New_York, EDT
+
+def _zone(name: str, fallback_hours: int):
+    """A named timezone when tzdata is available, else a fixed offset.
+
+    The fallback is only right during DST -- which is what the fixed-offset
+    constant this replaced was, unconditionally, all year.
+    """
+    try:
+        from zoneinfo import ZoneInfo
+        return ZoneInfo(name)
+    except Exception:                       # no tzdata on the host
+        return timezone(timedelta(hours=fallback_hours))
+
+
+# EVERY TIME THIS MODULE EMITS IS PACIFIC, because that is the clock the owner
+# reads the page on. Eastern still has to exist here: the market, the mandate,
+# the scheduler and the journal headings are all stated in it, so ET is what
+# journal times are *parsed* as before being converted. Nothing in ET leaves
+# this file except as an explicit "as written" string beside the converted
+# time -- a page that mixed the two silently would be worse than either.
+PT = _zone("America/Los_Angeles", -7)
+ET = _zone("America/New_York", -4)
 
 
 # --------------------------------------------------------------------------
@@ -372,7 +393,7 @@ def _split_entries(text: str) -> list:
 
 def journal(days: int = 7) -> list:
     """Entries from the last `days` days, newest first, across all journal files."""
-    cutoff = (datetime.now(ET) - timedelta(days=days)).date()
+    cutoff = (datetime.now(PT) - timedelta(days=days)).date()
     seen, entries = set(), []
 
     for path in _journal_files():
@@ -396,9 +417,23 @@ def journal(days: int = 7) -> list:
                 continue
             seen.add(key)
 
+            # Headings carry the market's clock -- ET, or UTC on a handful of
+            # the oldest entries, which is why the label is read rather than
+            # assumed. Convert to Pacific for display but keep the string as
+            # written: an entry that says "15:30 ET" must not look as though
+            # it had been edited to say 12:30.
             tm = _H_TIME.search(head[m.end():])
-            hh, mm = (int(tm.group(1)), int(tm.group(2))) if tm else (0, 0)
-            hh, mm = min(hh, 23), min(mm, 59)
+            e_date, e_time, as_written = m.group(1), "", ""
+            if tm:
+                hh = min(int(tm.group(1)), 23)
+                mm = min(int(tm.group(2)), 59)
+                zname = (tm.group(3) or "ET").upper()
+                as_written = f"{hh:02d}:{mm:02d} {zname}"
+                stated = datetime(d.year, d.month, d.day, hh, mm,
+                                  tzinfo=(timezone.utc if zname == "UTC" else ET))
+                local = stated.astimezone(PT)
+                e_date = local.strftime("%Y-%m-%d")
+                e_time = local.strftime("%H:%M")
 
             title = head
             for sep in ("—", " - ", "--"):
@@ -408,9 +443,13 @@ def journal(days: int = 7) -> list:
 
             av = _ACCT_VAL.search(body)
             entries.append({
-                "date": m.group(1),
-                "time": f"{hh:02d}:{mm:02d}",
-                "sort": f"{m.group(1)} {hh:02d}:{mm:02d}",
+                # Pacific. An entry whose heading states no time at all keeps
+                # its written date and sorts at the top of that day, since
+                # there is nothing to convert.
+                "date": e_date,
+                "time": e_time,
+                "time_as_written": as_written,
+                "sort": f"{e_date} {e_time or '00:00'}",
                 "heading": head,
                 "title": title,
                 "body": body,
@@ -437,14 +476,15 @@ def _counts_orders(body: str) -> int:
     return len(re.findall(r"\bref_id\b", body))
 
 
-def equity_curve(days: int = 7) -> list:
+def equity_curve(days: int = 7, entries=None) -> list:
     """Account value over time, scraped from journal entries.
 
     Best-effort: entries that do not state a value are skipped. Returned
     oldest-first for plotting.
     """
+    entries = journal(days) if entries is None else entries
     pts = [{"t": e["sort"], "v": e["account_value"]}
-           for e in journal(days) if e["account_value"]]
+           for e in entries if e["account_value"]]
     pts.reverse()
     return pts
 
@@ -633,11 +673,12 @@ def _event(order, fill) -> dict:
         if src["side"] == "sell":
             vs_limit = -vs_limit
     at = fill["filled_at"] if fill else order["at"]
-    # Formatted here rather than in the browser: ET is what every other
-    # timestamp on the page and in the journal is stated in, and the client
-    # has no business guessing the market's timezone from the viewer's.
+    # Formatted here rather than in the browser: the page states Pacific
+    # throughout, and the client has no business deriving that from whatever
+    # clock the viewer's machine happens to be set to. Robinhood returns UTC,
+    # so this is the only conversion an order timestamp gets.
     local = _utc(at)
-    local = local.astimezone(ET) if local else None
+    local = local.astimezone(PT) if local else None
     return {
         "kind": "fill" if fill else "unfilled",
         "symbol": src["symbol"],
@@ -648,8 +689,8 @@ def _event(order, fill) -> dict:
         "notional": order["notional"] if order else (
             round((price or 0) * src["quantity"], 2)),
         "at": at,
-        "date_et": local.strftime("%Y-%m-%d") if local else "",
-        "time_et": local.strftime("%H:%M") if local else "",
+        "date_pt": local.strftime("%Y-%m-%d") if local else "",
+        "time_pt": local.strftime("%H:%M") if local else "",
         "placed_at": order["at"] if order else None,
         "vs_limit_pct": vs_limit,
         "pnl_pct": (fill or {}).get("pnl_pct"),
@@ -684,20 +725,530 @@ def agent_status() -> dict:
         except OSError:
             pass
 
+    # The log records UTC; the page shows Pacific like everything else.
+    stamp = _utc(last_run) if last_run else None
     return {
         "halt": halt,
-        "last_run": last_run,
+        "last_run": (stamp.astimezone(PT).strftime("%Y-%m-%d %H:%M") if stamp
+                     else last_run),
         "last_rc": last_rc,
-        "cadence": "hourly on the half hour, 09:30-15:30 ET, Mon-Fri",
-        "now_et": datetime.now(ET).strftime("%Y-%m-%d %H:%M ET"),
+        # The scheduler is set in ET because the market is; 06:30-12:30 is the
+        # same seven runs read off a Pacific clock.
+        "cadence": "hourly on the half hour, 06:30-12:30 PT, Mon-Fri",
+        "cadence_et": "09:30-15:30 ET",
+        "now_pt": datetime.now(PT).strftime("%Y-%m-%d %H:%M PT"),
+    }
+
+
+# --------------------------------------------------------------------------
+# Static guidelines -- the rules every run trades under
+# --------------------------------------------------------------------------
+
+# WHY THE NUMBERS ARE READ, NOT RESTATED. config/limits.json is the file
+# hooks/guardrails.py actually enforces, so the caps below are pulled from it
+# at request time. A hard-coded copy here would keep rendering $500 the day the
+# cap moved, and a dashboard that misstates the limits the agent trades under
+# is worse than one that never showed them.
+LIMITS_DEFAULT = {
+    "max_position_usd": 500.0, "max_orders_per_day": 50, "max_positions": 9,
+    "min_price_usd": 5.0, "min_cash_reserve_pct": 10.0,
+    "circuit_breaker_value_usd": 850.0, "allowed_types": ["limit"],
+    "allowed_market_hours": ["regular_hours"], "account_number": ACCOUNT,
+}
+
+
+def _limits() -> dict:
+    out = dict(LIMITS_DEFAULT)
+    try:
+        with open(os.path.join(REPO, "config", "limits.json"),
+                  encoding="utf-8") as fh:
+            got = json.load(fh)
+        if isinstance(got, dict):
+            out.update({k: v for k, v in got.items() if v is not None})
+    except (OSError, json.JSONDecodeError):
+        out["_source"] = "defaults — config/limits.json unreadable"
+    return out
+
+
+def guidelines() -> dict:
+    """The mandate's investing rules, grouped, with each rule's enforcement layer.
+
+    Static on purpose. Everything else on this page is behaviour -- what the
+    agent did -- and behaviour is only judgeable against the rules it was
+    supposed to follow, which are otherwise only visible by reading CLAUDE.md
+    on the VM. `layer` is the distinction that matters most: "hook" rules are
+    rejected in code before an order reaches Robinhood, "agent" rules the hook
+    cannot see and the agent must enforce against live account state each run.
+    A reader auditing a bad trade needs to know which kind was broken.
+
+    This is a mirror of CLAUDE.md and has to be edited when the mandate is.
+    Only the caps read themselves, from the file the hook enforces; the numbers
+    quoted in the prose here and in SOURCE_CATALOG are checked against that
+    same file by scripts/test-dashboard.sh, so a changed limit fails the test
+    rather than quietly misinforming the owner.
+    """
+    L = _limits()
+    money = lambda v: f"${float(v):,.0f}"
+    groups = [
+        ("Account and instrument", [
+            ("hook", f"Trade only the agentic cash account {L['account_number']}."),
+            ("hook", "Limit orders only, entries and exits alike — market and "
+                     "stop orders are rejected."),
+            ("hook", "Regular-hours orders only. Every run happens inside "
+                     "06:30-12:30 PT, so an order can never be left working "
+                     "while nothing is awake to manage it."),
+            ("agent", "US-listed common stocks only. No ETFs, funds, trusts, "
+                      "options, crypto, margin or leveraged products."),
+            ("hook", f"Price floor {money(L['min_price_usd'])} per share."),
+        ]),
+        ("Position sizing", [
+            ("hook", f"At most {money(L['max_position_usd'])} in any one name — "
+                     "a ceiling for the highest-conviction setups, not a target."),
+            ("agent", f"At most {L['max_positions']} concurrent positions, one "
+                      "per ticker."),
+            ("agent", f"Keep at least {L['min_cash_reserve_pct']:.0f}% of account "
+                      "value in cash at all times."),
+            ("agent", "Buy with settled funds only. Sale proceeds are unspendable "
+                      "until T+1 settlement, which is what avoids good-faith "
+                      "violations."),
+            ("hook", f"At most {L['max_orders_per_day']} buy orders per day."),
+        ]),
+        ("Entry — buy the trending low", [
+            ("agent", "No watchlist. Candidates come from two saved scanners "
+                      "every run, ranked by relative volume, capped at 50 names "
+                      "before any per-name analysis."),
+            ("agent", "Buy an uptrending or basing name that has pulled back to "
+                      "support: hourly RSI at or below 35, or price near the low "
+                      "of its 5-10 day range, or a 2%+ dip with the higher "
+                      "timeframe still up."),
+            ("agent", "Confirm on historicals and technical indicators, never on "
+                      "a quote alone — successive lower closes are a name still "
+                      "falling, not a base."),
+            ("agent", "News screen before every buy. Veto on a pending buyout, a "
+                      "dilutive offering, fraud or an investigation, delisting or "
+                      "going-concern risk, or a failed trial."),
+            ("agent", "Veto any name reporting earnings inside the next 2 trading "
+                      "days."),
+            ("agent", "Check book depth and average volume: a limit order in a "
+                      "thin name sits unfilled or fills badly."),
+            ("agent", "When a setup is marginal, skip it. Most runs should place "
+                      "no orders at all."),
+        ]),
+        ("Exit — sell the trending high", [
+            ("agent", "Protective exit: close any position down 5% or more from "
+                      "entry with a limit sell. There are no stop orders, so this "
+                      "only happens because a run checked — it is done first, "
+                      "every run, before looking for entries."),
+            ("agent", "Profit target: +3-5% from entry, or hourly RSI at or above "
+                      "65, or price at the top of its recent range."),
+            ("agent", "Never carry a position through its own earnings print. "
+                      "Close it on the 11:30 or 12:30 PT run when it reports "
+                      "after today's close or any time the next trading day."),
+            ("agent", "Check the news behind a triggered position before selling. "
+                      "It does not make the exit discretionary — it records "
+                      "whether the move was company-specific or market noise."),
+            ("agent", "Never average down into a position more than once."),
+        ]),
+        ("Circuit breakers", [
+            ("agent", f"Below {money(L['circuit_breaker_value_usd'])} of account "
+                      "value, open no new positions. Keep managing exits and wait "
+                      "for owner instructions."),
+            ("agent", "On any order rejection, unexpected balance or tool failure, "
+                      "stop trading for the run and record what happened."),
+            ("hook", "The state/HALT kill switch ends a run before it can place "
+                     "anything."),
+        ]),
+        ("Cadence and record", [
+            ("agent", "Seven runs a day, hourly on the half hour, 06:30-12:30 PT, "
+                      "Monday to Friday. Nothing runs overnight or at weekends."),
+            ("agent", "Each run sees roughly every twelfth 5-minute bar, so a "
+                      "threshold may have been crossed and recovered in bars no "
+                      "run ever saw."),
+            ("agent", "Nothing manages a position between 13:00 and 06:30 PT — "
+                      "17.5 hours. The first run of the day is the one most "
+                      "likely to need action."),
+            ("agent", "Append a journal entry every run, orders or not, and record "
+                      "rejections and losing trades plainly."),
+        ]),
+    ]
+    return {
+        "groups": [{"title": t,
+                    "rules": [{"layer": lay, "text": txt} for lay, txt in rs]}
+                   for t, rs in groups],
+        "limits": L,
+        "counts": {
+            "hook": sum(1 for _, rs in groups for lay, _t in rs if lay == "hook"),
+            "agent": sum(1 for _, rs in groups for lay, _t in rs if lay == "agent"),
+        },
+    }
+
+
+# --------------------------------------------------------------------------
+# Decision inputs -- which data source fed which order
+# --------------------------------------------------------------------------
+
+# The catalogue is the mandate's own pipeline, one row per thing the agent is
+# told to look at before it places an order. `sides` is which kind of order the
+# source informs; `required` is the sides where the mandate makes it mandatory
+# rather than supporting.
+#
+# `patterns` is how a source is EVIDENCED rather than assumed: the agent names
+# its inputs in the journal entry for the run ("hourly RSI 25.0", "ran both
+# saved scans", "get_equity_tradability came back untradable"), so an order is
+# matched to its run's entry and the entry is searched for each source. That
+# makes the attribution auditable -- every citation on the page shows the line
+# it came from -- but it also makes it a lower bound: the journal is prose, and
+# a source the agent used without writing down reads here as uncited. The UI
+# says so rather than presenting absence as proof.
+SOURCE_CATALOG = [
+    {
+        "id": "account", "label": "Account state",
+        "origin": "get_equity_positions, get_portfolio, get_accounts",
+        "provides": "positions held, slots used, cash, and settled versus "
+                    "unsettled funds",
+        "feeds": "the 9-position ceiling, the 10% cash reserve and "
+                 "settled-funds discipline",
+        "sides": ["buy", "sell"], "required": ["buy", "sell"],
+        "patterns": r"get_equity_positions|get_portfolio|get_accounts|"
+                    r"buying[_ ]power|unsettled|settled cash|cash reserve",
+    },
+    {
+        "id": "scan", "label": "Saved scanners",
+        "origin": "run_scan x2 + scripts/rank-candidates.py",
+        "provides": "the candidate universe — both scans filter to hourly RSI "
+                    "at or below 35, then rows rank by relative volume",
+        "feeds": "where candidates come from at all, since there is no watchlist",
+        "sides": ["buy"], "required": ["buy"],
+        "patterns": r"run_scan|saved scans?|both scans|rank-candidates|"
+                    r"scanner|top[- ]50|relvol|relative volume",
+    },
+    {
+        "id": "quote", "label": "Live quotes",
+        "origin": "get_equity_quotes",
+        "provides": "last trade, bid and ask",
+        "feeds": "the $5 price floor, P&L against entry, and where the limit "
+                 "price is set",
+        "sides": ["buy", "sell"], "required": ["buy", "sell"],
+        "patterns": r"get_equity_quotes|quotes?\b|bid[ /x]|ask[ /x]|spread|"
+                    r"\bmid\b",
+    },
+    {
+        "id": "historicals", "label": "Price history",
+        "origin": "get_equity_historicals",
+        "provides": "5-minute and daily bars",
+        "feeds": "range position and the higher-timeframe trend — a base "
+                 "against a name still falling",
+        "sides": ["buy", "sell"], "required": ["buy"],
+        "patterns": r"get_equity_historicals|historicals?|"
+                    r"5-?min(?:ute)? bars?|hourly bars?|daily bars?|"
+                    r"lower closes|\d+[- ]day range|range (?:low|high|position)",
+    },
+    {
+        "id": "technicals", "label": "Technical indicators",
+        "origin": "get_equity_technical_indicators",
+        "provides": "hourly RSI",
+        "feeds": "the RSI-at-or-below-35 entry trigger and the "
+                 "RSI-at-or-above-65 profit exit",
+        "sides": ["buy", "sell"], "required": ["buy"],
+        "patterns": r"get_equity_technical_indicators|technical indicators?|"
+                    r"technicals|hourly rsi|rsi ?1h|rsi[ :=]",
+    },
+    {
+        "id": "book", "label": "Order-book depth",
+        "origin": "get_equity_price_book",
+        "provides": "resting size on each side of the spread",
+        "feeds": "whether a limit order of this size can fill cleanly",
+        "sides": ["buy"], "required": ["buy"],
+        # The last three alternatives are how a book check is usually written
+        # down in practice -- "bid $9.72 x 63k / ask $9.73 x 56k", "98k shares
+        # available" -- rather than by naming the tool. The size on the x is
+        # required to be two digits so that "scans x2" is not read as depth.
+        "patterns": r"get_equity_price_book|price[- ]book|order book|\bbook\b|"
+                    r"\bdepth\b|thin(?:ly)? (?:book|traded)|"
+                    r"[x×] ?\d{2,}[km]?\b|shares? available|\bresting\b",
+    },
+    {
+        "id": "tradability", "label": "Session eligibility",
+        "origin": "get_equity_tradability",
+        "provides": "which sessions the name may be traded in",
+        "feeds": "the session the order is tagged to",
+        "sides": ["buy"], "required": ["buy"],
+        "patterns": r"get_equity_tradability|tradabilit|tradable|untradable|"
+                    r"eligible for (?:regular|extended)",
+    },
+    {
+        "id": "news", "label": "News screen",
+        "origin": "scripts/news-brief.py (fallback: get_equity_news)",
+        "provides": "recent headlines, keyword-flagged",
+        "feeds": "the buy veto on a buyout, an offering, fraud or a failed "
+                 "trial — and on a triggered exit, whether the move was "
+                 "company-specific or market noise",
+        "sides": ["buy", "sell"], "required": ["buy"],
+        "patterns": r"news[- ]brief|get_equity_news|"
+                    r"news (?:screen|check|brief|feed|flag)|headlines?|FLAGS",
+    },
+    {
+        "id": "earnings", "label": "Earnings date",
+        "origin": "get_earnings_results (fallback: get_earnings_calendar)",
+        "provides": "the next report date, its am/pm timing, and whether it is "
+                    "confirmed",
+        "feeds": "the 2-trading-day entry veto and the rule against holding "
+                 "through a print",
+        "sides": ["buy", "sell"], "required": ["buy", "sell"],
+        "patterns": r"get_earnings_results|get_earnings_calendar|"
+                    r"earnings (?:date|check|screen|calendar|results|veto|"
+                    r"inside|risk)|reports (?:am|pm)|no earnings data|earnings",
+    },
+    {
+        "id": "review", "label": "Pre-trade review",
+        "origin": "review_equity_order",
+        "provides": "Robinhood's own cost estimate and any order alerts",
+        "feeds": "the mandate's requirement to review before placing",
+        "sides": ["buy", "sell"], "required": ["buy", "sell"],
+        "patterns": r"review_equity_order|reviewed the order|"
+                    r"pre-?trade (?:review|estimate)|review(?:ed)? first",
+    },
+    {
+        "id": "journal", "label": "Prior-run journal",
+        "origin": "state/journal.md",
+        "provides": "entry prices, recorded earnings dates, and names vetoed "
+                    "on earlier runs",
+        "feeds": "P&L against entry and the arithmetic behind the earnings "
+                 "exit, both of which need a number no live call returns",
+        "sides": ["buy", "sell"], "required": ["buy", "sell"],
+        "patterns": r"state/journal|journal(?:\.md)?\b|last run|previous run|"
+                    r"prior run|carried forward|recorded (?:entry|earnings)",
+    },
+    {
+        "id": "guardrails", "label": "Hook guardrails",
+        "origin": "hooks/guardrails.py + config/limits.json",
+        "provides": "the hard caps, checked on the order itself",
+        "feeds": "account, order type, session, position cap and daily count — "
+                 "a rejected order never reaches Robinhood",
+        "sides": ["buy", "sell"], "required": ["buy", "sell"],
+        # Not a journal match: a ledger row exists only because the hook
+        # evaluated this order and let it through, so the row IS the evidence.
+        "patterns": None, "evidence": "ledger",
+    },
+]
+
+_SRC_RE = {c["id"]: re.compile(c["patterns"], re.I)
+           for c in SOURCE_CATALOG if c.get("patterns")}
+
+
+def _blocks(body: str) -> list:
+    """Body split on blank lines.
+
+    The unit of attribution is a block, not a line: the journal wraps prose, so
+    the sentence naming a source is often not the line naming the ticker, but
+    both sit in the same paragraph, bullet or table row.
+    """
+    out, buf = [], []
+    for line in body.splitlines():
+        if line.strip():
+            buf.append(line)
+        elif buf:
+            out.append("\n".join(buf))
+            buf = []
+    if buf:
+        out.append("\n".join(buf))
+    return out
+
+
+def _snippet(text: str, match) -> str:
+    """The line a match landed on, windowed so the matched phrase is visible.
+
+    Trimming a long line from its start is what an obvious implementation does
+    and it is wrong here: journal lines run past 300 characters, so the phrase
+    that evidenced the source is routinely the part that gets cut, leaving a
+    quote that does not support the claim beside it. The window is centred on
+    the match instead, with an ellipsis on whichever side was cut.
+    """
+    start = text.rfind("\n", 0, match.start()) + 1
+    end = text.find("\n", match.end())
+    end = end if end != -1 else len(text)
+    line, at = text[start:end], match.start() - start
+
+    keep = 180
+    if len(line) > keep:
+        lo = max(0, at - keep // 2)
+        hi = min(len(line), lo + keep)
+        lo = max(0, hi - keep)
+        line = ("…" if lo else "") + line[lo:hi] + ("…" if hi < len(line) else "")
+    return re.sub(r"\s+", " ", line).strip(" -*|#>").strip()
+
+
+def _run_entry(entries):
+    """Index run entries by start time so an order can find the run that placed it."""
+    starts = []
+    for e in entries:
+        if not e["time"]:
+            continue                        # no time in the heading to place it by
+        try:
+            starts.append((datetime.strptime(f"{e['date']} {e['time']}",
+                                             "%Y-%m-%d %H:%M")
+                           .replace(tzinfo=PT), e))
+        except ValueError:
+            continue
+    starts.sort(key=lambda r: r[0])
+    return starts
+
+
+def decisions(days: int = 7, entries=None, acts=None) -> dict:
+    """Every order joined to the data sources evidenced behind it.
+
+    The journal entry for a run is the evidence, so an order is first matched
+    to its run: entries are stamped with the run's start time and an order
+    belongs to the latest run that started no later than it did (plus five
+    minutes of slack, since a heading is written to the minute the run began
+    and the order lands a moment after). A citation inside a passage that names
+    the ticker is `direct`; the same source found elsewhere in the entry is
+    `run`, because it was part of the same decision but may have been written
+    about another name. `direct` claims the passage and not the line: the unit
+    of matching is a paragraph, so the quoted line can be a neighbour of the
+    one naming the ticker, and the UI's label says only that.
+    """
+    entries = journal(days) if entries is None else entries
+    acts = activity(days) if acts is None else acts
+    starts = _run_entry(entries)
+
+    # Counted per side, because `required` differs per side: the news screen is
+    # mandatory on every buy but only expected on a sell that actually
+    # triggered, so one blended percentage would misread both.
+    rows = []
+    tally = {c["id"]: {s: {"applies": 0, "cited": 0, "direct": 0}
+                       for s in ("buy", "sell")} for c in SOURCE_CATALOG}
+
+    for ev in acts.get("events", []):
+        when = _utc(ev["at"])
+        when = when.astimezone(PT) if when else None
+
+        entry, best = None, None
+        if when is not None:
+            for start, cand in starts:
+                if start <= when + timedelta(minutes=5):
+                    if best is None or start > best:
+                        best, entry = start, cand
+                elif entry is not None:
+                    break
+            # A run three hours away did not place this order.
+            if best is not None and (when - best) > timedelta(hours=3):
+                entry, best = None, None
+
+        body = entry["body"] if entry else ""
+        sym = re.compile(r"\b" + re.escape(ev["symbol"] or "") + r"\b") \
+            if ev.get("symbol") else None
+        about, other = [], []
+        for blk in _blocks(body):
+            (about if (sym and sym.search(blk)) else other).append(blk)
+        about_text, other_text = "\n\n".join(about), "\n\n".join(other)
+
+        cited, missing, gaps = [], [], []
+        for c in SOURCE_CATALOG:
+            if ev["side"] not in c["sides"]:
+                continue
+            t = tally[c["id"]][ev["side"]]
+            t["applies"] += 1
+            required = ev["side"] in c["required"]
+
+            if c.get("evidence") == "ledger":
+                if ev.get("ref_id"):
+                    cited.append({"id": c["id"], "tier": "ledger",
+                                  "quote": "every order in state/ledger.json "
+                                           "passed the hook to get there"})
+                    t["cited"] += 1
+                    t["direct"] += 1
+                    continue
+                missing.append(c["id"])
+                continue
+
+            rx = _SRC_RE[c["id"]]
+            hit = rx.search(ev.get("note") or "")
+            if hit:
+                cited.append({"id": c["id"], "tier": "direct",
+                              "quote": _snippet(ev["note"], hit)})
+            elif (hit := rx.search(about_text)):
+                cited.append({"id": c["id"], "tier": "direct",
+                              "quote": _snippet(about_text, hit)})
+            elif (hit := rx.search(other_text)):
+                cited.append({"id": c["id"], "tier": "run",
+                              "quote": _snippet(other_text, hit)})
+            else:
+                missing.append(c["id"])
+                if required:
+                    gaps.append(c["id"])
+                continue
+            t["cited"] += 1
+            if cited[-1]["tier"] == "direct":
+                t["direct"] += 1
+
+        rows.append({
+            # Whatever identifies this order elsewhere: the ref_id the agent
+            # generated, or the id Robinhood assigned when only a fill is on
+            # record. Rendered, so a row can be tied back to the ledger. The
+            # order's size and price are deliberately not repeated here -- the
+            # activity card above owns those, and this card owns the inputs.
+            "key": ev.get("ref_id") or ev.get("order_id") or ev["at"],
+            "key_kind": ("ref_id" if ev.get("ref_id")
+                         else "order_id" if ev.get("order_id") else "timestamp"),
+            "symbol": ev["symbol"], "side": ev["side"],
+            "date_pt": ev["date_pt"], "time_pt": ev["time_pt"],
+            "run": ({"date": entry["date"], "time": entry["time"],
+                     "as_written": entry.get("time_as_written", ""),
+                     "title": entry["title"]} if entry else None),
+            "cited": cited,
+            "missing": missing,
+            "missing_required": gaps,
+        })
+
+    coverage = []
+    for c in SOURCE_CATALOG:
+        per = tally[c["id"]]
+        n = per["buy"]["applies"] + per["sell"]["applies"]
+        got = per["buy"]["cited"] + per["sell"]["cited"]
+        row = {
+            "id": c["id"], "label": c["label"], "origin": c["origin"],
+            "provides": c["provides"], "feeds": c["feeds"],
+            "sides": c["sides"], "required": c["required"],
+            "applies": n, "cited": got,
+            "direct": per["buy"]["direct"] + per["sell"]["direct"],
+            "pct": round(100.0 * got / n, 1) if n else None,
+        }
+        for side in ("buy", "sell"):
+            row[side] = dict(per[side])
+            row[side]["required"] = side in c["required"]
+            row[side]["pct"] = (round(100.0 * per[side]["cited"]
+                                      / per[side]["applies"], 1)
+                                if per[side]["applies"] else None)
+        coverage.append(row)
+
+    # No separate catalogue: `coverage` is built from every row of
+    # SOURCE_CATALOG whether or not an order exercised it, so it already
+    # carries each source's description, and a second copy would be one more
+    # thing to keep in step.
+    #
+    # No aggregate "orders missing a mandatory screen" either, though it is a
+    # one-line sum. Two of the mandatory sources -- the pre-trade review and
+    # the journal read -- are things the agent does every run and writes down
+    # only sometimes, so that count lands near zero-of-everything and reads as
+    # an indictment of the trading rather than of the record-keeping. The
+    # per-source bars say the same thing without the false headline.
+    return {
+        "coverage": coverage,
+        "orders": rows,
+        "buys": sum(1 for r in rows if r["side"] == "buy"),
+        "sells": sum(1 for r in rows if r["side"] == "sell"),
+        "unmatched_runs": sum(1 for r in rows if r["run"] is None),
     }
 
 
 def snapshot(days: int = 7) -> dict:
     """Everything the dashboard renders, in one payload."""
     live = live_state()
+    entries = journal(days)
+    acts = activity(days)
     return {
-        "generated_at": datetime.now(ET).strftime("%Y-%m-%d %H:%M:%S ET"),
+        "generated_at": datetime.now(PT).strftime("%Y-%m-%d %H:%M:%S PT"),
         "window_days": days,
         "status": agent_status(),
         "portfolio": live["portfolio"],
@@ -705,11 +1256,15 @@ def snapshot(days: int = 7) -> dict:
         "open_orders": live["open_orders"],
         "live_error": live.get("error"),
         "live_stale": live.get("stale", False),
-        "journal": journal(days),
+        "journal": entries,
         "fills": fills(days),
         "orders": orders(days),
-        "activity": activity(days),
-        "equity_curve": equity_curve(days),
+        "activity": acts,
+        "equity_curve": equity_curve(days, entries),
+        # Passed the already-parsed journal and activity rather than letting it
+        # re-read them: both are the expensive part of a snapshot.
+        "decisions": decisions(days, entries, acts),
+        "guidelines": guidelines(),
     }
 
 

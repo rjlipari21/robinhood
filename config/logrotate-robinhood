@@ -1,0 +1,58 @@
+# Log rotation for the Robinhood trading agent.
+# Install with:  sudo cp config/logrotate-robinhood /etc/logrotate.d/robinhood
+#
+# Covers the logs that GROW without bound. The dated per-run logs
+# (logs/run-YYYY-MM-DD.log) are a separate problem -- they accumulate in count
+# rather than in size, and logrotate's maxage only prunes files it has itself
+# rotated -- so those are pruned by a cron find instead (see
+# scripts/install-log-pruning.sh).
+#
+# Context: on 2026-09-08 this VM's disk filled, which broke the OAuth refresh
+# chain and halted fourteen trading days. These logs were not the cause, but
+# an unbounded append on a box whose failure mode is "disk full" is worth
+# capping regardless.
+
+# su matters: these files are owned by the agent user, and logrotate refuses
+# to rotate files in a directory it does not trust unless told whose identity
+# to assume.
+su rjlipari21 rjlipari21
+
+/home/rjlipari21/robinhood-sync.log {
+    # Written every 5 minutes by the sync cron -- one or two lines a tick, so
+    # this is slow growth, not a flood. Weekly with a size floor keeps a
+    # useful window without rotating a near-empty file.
+    weekly
+    rotate 4
+    # minsize, not size: a bare `size` directive REPLACES the time interval
+    # and makes rotation purely size-triggered. minsize keeps the weekly
+    # schedule and adds "but skip it while the file is still small".
+    minsize 5M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # The cron job holds no persistent descriptor (it appends and exits), so a
+    # plain rename would be safe -- but copytruncate costs nothing and removes
+    # any dependence on that staying true.
+    copytruncate
+}
+
+/home/rjlipari21/robinhood/logs/token-refresh.log
+/home/rjlipari21/robinhood/logs/gcs-backup.log
+/home/rjlipari21/robinhood/logs/dashboard.log {
+    monthly
+    rotate 6
+    # maxsize, not size: rotate on the monthly schedule, OR early if the file
+    # blows past 5M before then. A bare `size` would drop the monthly cadence
+    # entirely and a runaway log is exactly the case worth catching early.
+    maxsize 5M
+    compress
+    delaycompress
+    missingok
+    notifempty
+    # Required here. systemd opens these with StandardOutput=append: and the
+    # dashboard service is long-running, so renaming the file out from under
+    # it would leave it writing to an unlinked inode -- the log would silently
+    # stop appearing while the disk kept filling.
+    copytruncate
+}

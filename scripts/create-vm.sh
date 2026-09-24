@@ -10,11 +10,19 @@ MACHINE_TYPE="${MACHINE_TYPE:-e2-small}"
 IMAGE_FAMILY="${IMAGE_FAMILY:-debian-12}"
 IMAGE_PROJECT="${IMAGE_PROJECT:-debian-cloud}"
 
+# Scopes must be set here: they are fixed at creation and can only be changed
+# while the instance is STOPPED. The default set includes devstorage.read_only,
+# which is enough to pull images but NOT to write backups -- the existing
+# trading-agent VM was created without this line and cannot run
+# scripts/backup-journal-gcs.sh as a result.
+SCOPES="${SCOPES:-https://www.googleapis.com/auth/devstorage.read_write,https://www.googleapis.com/auth/logging.write,https://www.googleapis.com/auth/monitoring.write}"
+
 gcloud compute instances create "$VM_NAME" \
   --zone="$ZONE" \
   --machine-type="$MACHINE_TYPE" \
   --image-family="$IMAGE_FAMILY" \
   --image-project="$IMAGE_PROJECT" \
+  --scopes="$SCOPES" \
   --boot-disk-size=20GB
 
 echo

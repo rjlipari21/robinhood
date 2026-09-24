@@ -1,0 +1,46 @@
+[Unit]
+# Cloudflare Tunnel for the read-only dashboard (systemd/robinhood-dashboard.service).
+#
+# cloudflared dials OUT to Cloudflare and holds the connection open; requests
+# are forwarded back down it to 127.0.0.1:8080. No inbound port is opened, no
+# GCP firewall rule exists, and the VM's external IP stays dark.
+#
+# LOCALLY-MANAGED, AND THE FLAGS ARE THE WHOLE POINT. `cloudflared service
+# install` writes a unit that runs `tunnel run --token-file`, which is
+# REMOTELY-managed mode: ingress comes from the Zero Trust dashboard and
+# /etc/cloudflared/config.yml is silently ignored. That is how this tunnel
+# spent its first hours answering 503 to every request -- the config file was
+# correct and simply not being read, and the only symptom was one WRN line
+# ("No ingress rules were defined") in a log nobody tails.
+#
+# So: pass --config explicitly and name the tunnel, which selects local mode
+# and takes credentials from the credentials-file in that config. If you ever
+# re-run `cloudflared service install`, it will overwrite this unit and put the
+# 503 back; reinstall this file afterwards.
+Description=Cloudflare Tunnel client (trading dashboard)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+TimeoutStartSec=15
+
+# --config is load-bearing: without it cloudflared falls back to token mode.
+ExecStart=/usr/bin/cloudflared --no-autoupdate --config /etc/cloudflared/config.yml tunnel run trading-dashboard
+
+Restart=on-failure
+RestartSec=5s
+
+# The tunnel is a network client that reads two config paths and needs nothing
+# else. It must keep /root visible -- the tunnel credentials live in
+# /root/.cloudflared -- so ProtectHome is deliberately not set.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

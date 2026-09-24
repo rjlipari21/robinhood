@@ -1,0 +1,52 @@
+[Unit]
+# Read-only web dashboard: positions, account state, and the agent's decision
+# log. Published to the internet through a Cloudflare Tunnel -- see
+# systemd/cloudflared.service and scripts/setup-dashboard.sh.
+#
+# It binds 127.0.0.1 and must stay there. The tunnel reaches it over loopback,
+# so nothing inbound is ever opened and the VM's external IP stays dark. That
+# loopback bind is also what makes the Cf-Access-Authenticated-User-Email check
+# in server.py meaningful: the header can only have come from Cloudflare if
+# Cloudflare is the only thing that can reach the socket.
+Description=Robinhood trading dashboard (read-only, loopback)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=%i
+WorkingDirectory=/home/%i/robinhood
+
+# The address Cloudflare Access is configured to allow. server.py rejects any
+# request whose Cloudflare identity header does not match, so a
+# misconfigured Access policy fails closed rather than serving the account.
+Environment=DASHBOARD_CF_EMAIL=rjlipari21@gmail.com
+
+ExecStart=/usr/bin/python3 /home/%i/robinhood/webapp/server.py --host 127.0.0.1 --port 8080
+Restart=always
+RestartSec=5
+
+# The process reads state/, logs/, and the MCP OAuth token, and writes nothing.
+# ReadOnlyPaths makes that structural rather than a promise about the code.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+ReadOnlyPaths=/home/%i/robinhood
+# No WriteablePaths at all: the dashboard has no reason to write anything, and
+# the trading agent's state files must never be mutated from here.
+
+StandardOutput=append:/home/%i/robinhood/logs/dashboard.log
+StandardError=append:/home/%i/robinhood/logs/dashboard.log
+
+[Install]
+WantedBy=multi-user.target

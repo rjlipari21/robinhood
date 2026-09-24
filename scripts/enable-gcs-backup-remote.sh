@@ -6,9 +6,24 @@
 # trading-agent itself would halt the machine executing the command with
 # nothing left to start it again. The guard below refuses to run there.
 #
-# Run it only AFTER the 09:30 ET run has placed the protective exits on RVMD
-# and NWS: the VM is down for a minute or two here, and a stop that overlaps a
-# scheduled run silently skips it.
+# TIMING. The VM is stopped for a minute or two below, and a run missed during
+# that window is LOST, not deferred: robinhood-agent@.timer sets
+# Persistent=false, so systemd does not replay a missed activation on boot.
+# (rh-token-refresh@.timer sets Persistent=true and does catch up, so the token
+# is not at risk here -- only the trading run is.)
+#
+# Two consequences:
+#   1. Run this only AFTER the 09:30 ET run has placed the outstanding
+#      protective exits. A stop that overlaps 09:30 skips them entirely.
+#   2. Start it mid-hour -- 10:00 or 11:00 ET, not 10:29. The timer fires at
+#      09:30, 10:30 ... 15:30 ET, and a stop/start spanning one of those marks
+#      silently drops that run. Outside 09:30-16:00 ET nothing is scheduled at
+#      all, so after the close is safest of all.
+#
+# The timers themselves do survive the reboot: both are `systemctl enable`d
+# with symlinks in /etc/systemd/system/timers.target.wants/, verified
+# 2026-09-23. Persistent= governs catch-up of MISSED runs, not whether the
+# timer returns. The final command this script prints re-checks that.
 #
 # Usage:  ./scripts/enable-gcs-backup-remote.sh <bucket-name> [project-id]
 set -euo pipefail

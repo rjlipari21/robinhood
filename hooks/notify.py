@@ -284,6 +284,20 @@ def main():
         run_fills_mode(url, token)
         sys.exit(0)
 
+    # alert mode: notify.py alert "<title>" "<body>"
+    #
+    # For infrastructure failures rather than trades. The 2026-09-08 token
+    # breakage wrote state/TOKEN_REFRESH_FAILED and logged loudly, and both
+    # were invisible until someone opened a terminal -- fourteen trading days
+    # later. A marker file nobody reads is not an alert. High priority and a
+    # warning tag because, unlike a missed fill notification, the whole point
+    # is to interrupt.
+    if len(sys.argv) > 1 and sys.argv[1] == "alert":
+        title = sys.argv[2] if len(sys.argv) > 2 else "Trading agent alert"
+        body = sys.argv[3] if len(sys.argv) > 3 else ""
+        send(url, token, title, body, tags="warning", priority="high")
+        sys.exit(0)
+
     try:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):

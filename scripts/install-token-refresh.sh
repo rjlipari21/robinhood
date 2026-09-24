@@ -51,7 +51,12 @@ Description=Record a failed robinhood-trading token refresh for %i
 [Service]
 Type=oneshot
 User=%i
-ExecStart=/bin/bash -c 'ts=\$(date -u +%%FT%%TZ); echo "\$ts TOKEN REFRESH FAILED - interactive re-auth required"; echo "\$ts token refresh failed" > ${REPO_DIR}/state/TOKEN_REFRESH_FAILED'
+WorkingDirectory=${REPO_DIR}
+# The marker file is for the agent; the push is for the owner. Only the second
+# one is actually an alert: the 2026-09-08 breakage wrote this same marker and
+# it went unread for fourteen trading days while every run halted at step 2.
+# '|| true' so a dead ntfy topic cannot mask the failure it is reporting.
+ExecStart=/bin/bash -c 'ts=\$(date -u +%%FT%%TZ); echo "\$ts TOKEN REFRESH FAILED - interactive re-auth required"; echo "\$ts token refresh failed" > ${REPO_DIR}/state/TOKEN_REFRESH_FAILED; /usr/bin/python3 ${REPO_DIR}/hooks/notify.py alert "Robinhood token refresh FAILED" "The agent cannot trade until you re-auth. Run /mcp in an interactive Claude Code session on the VM. See logs/token-refresh.log." || true'
 StandardOutput=append:${REPO_DIR}/logs/token-refresh.log
 StandardError=append:${REPO_DIR}/logs/token-refresh.log
 EOF

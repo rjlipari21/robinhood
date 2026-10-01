@@ -38,8 +38,9 @@ committed scripts already does.
    new positions this run. Manage exits only and say so in the journal.
 4. Manage existing positions FIRST. For each holding, compare against entry:
    - down ≥5% → protective exit, limit sell now
-   - up +3–5%, or hourly RSI ≥ 65, or at the upper end of its recent range
-     → sell into strength with a limit sell
+   - up +3–5%, or hourly RSI ≥ 65 while up at least +2%, or at the upper
+     end of its recent range → sell into strength with a limit sell. RSI ≥ 65
+     with the position below +2% is NOT an exit: hold it.
    There are no stop orders, so an unchecked losing position is unprotected.
    Batch what you can: `get_equity_quotes` and `get_equity_historicals` both
    take a list of symbols, so price all holdings in one call each rather than

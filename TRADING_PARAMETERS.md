@@ -173,6 +173,15 @@ is the lever, not restoring the cadence.
   with two consecutive lower 5-minute highs — these are the primary exit
   triggers and fire without waiting on macro. MACRO flipping to DOWN-ACCEL
   while the position is green is an additional, faster trigger to exit.
+- **RSI exits need a +2% gain first** (owner instruction, 2026-10-01). An RSI
+  ≥ 65 reading — 5-minute or hourly — only triggers a sale when the position
+  is already at least +2% above average cost. Below that, hold, and let the
+  price targets, the protective exit and the earnings exit govern it. Reason:
+  over the first 30 closed trades (2026-08-25 → 09-29) the average win was
+  +$2.00 against an average loss of −$5.95. Many wins were RSI exits taken at
+  +0–1.5% (HLN +0.6%, NKE 0.0%, KO −0.03%, AFRM +0.9%, PFE +1.3%, FCX +1.5%),
+  while losses ran the full −5%. RSI ≥ 65 on a stock that has only bounced
+  back to its entry price is a recovery, not strength worth selling.
 - Hold the remaining rungs while MICRO trend state stays UP — a runner is
   how the ladder pays for the small losses.
 

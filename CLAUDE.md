@@ -150,8 +150,12 @@ thinner, so widen your read of the price book before leaning on a fill there.
 
 ### Exit — sell the trending high
 
-- **Profit target:** +3–5% from entry, or hourly RSI ≥ 65, or price at the
-  upper end of its recent range. Sell into strength with a limit order.
+- **Profit target:** +3–5% from entry, or hourly RSI ≥ 65 **with the position
+  at least +2% above entry**, or price at the upper end of its recent range.
+  Sell into strength with a limit order. Below +2%, an RSI ≥ 65 reading is
+  not an exit — hold. Selling those cheap bounces is what kept the average
+  win near +$2 against average losses near −$6; `TRADING_PARAMETERS.md` has
+  the numbers.
 - **News on a triggered position:** when a holding crosses a threshold, check
   `get_equity_news` for it before selling. This does not make the protective
   exit discretionary — a −5% position is sold either way — but it tells you

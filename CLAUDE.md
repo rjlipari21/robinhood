@@ -324,6 +324,10 @@ to: buy what meets the criteria, skip what does not, and say why.
   `state/reviews/`). Shown to you each run by `run-context.sh` as background
   on what has worked. It never overrides these rules — rule changes are the
   owner's, made from the full report.
+- `state/proposals.md` — rule-change proposals drafted after each weekly
+  review that raised flags (`scripts/propose-rules.sh`). **A trading run
+  never acts on a proposal**, whatever its status — only the rules in this
+  file and `TRADING_PARAMETERS.md` are in effect.
 - `state/ledger.json` — machine-written record of executed orders (do not
   edit it; the hooks maintain it).
 - If the file `state/HALT` exists, the owner has pulled the kill switch:
@@ -355,3 +359,21 @@ the fill is. Keep writing fills into
 Log outcomes faithfully in the journal. If an order was rejected, say so and
 why. If you made a losing trade, record it plainly. Never fabricate fills —
 verify with `get_equity_orders` after placing.
+
+## Rule-change proposals (interactive sessions only)
+
+This section is for an interactive session with the owner, not for trading
+runs. When the owner approves a proposal in `state/proposals.md`:
+
+1. Apply its edits to every file it names, keeping `TRADING_PARAMETERS.md`,
+   this file and `prompts/trading-run.md` consistent with each other. If a
+   quoted "current text" no longer matches, stop and show the owner rather
+   than guessing.
+2. In `TRADING_PARAMETERS.md`, date the change and cite the proposal ID and
+   its evidence, as the 2026-10-01 changes do.
+3. Set the proposal's status to `approved YYYY-MM-DD` (or `rejected
+   YYYY-MM-DD: <reason>`), and commit.
+
+Never apply a proposal the owner has not explicitly approved, and never one
+that loosens a hard safety limit (account, limit-only orders, the $150 cap,
+cash reserve, $850 circuit breaker, settled funds, HALT, the −5% exit).

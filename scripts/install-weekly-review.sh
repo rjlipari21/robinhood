@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Install the systemd units for the weekly review (scripts/weekly-review.py).
+# Install the systemd units for the weekly review (scripts/weekly-review.py)
+# and the rule-change proposals that follow it (scripts/propose-rules.sh).
 #
 # Fridays 16:30 ET: after the last run of the week (15:30) has finished and
 # its trade record is rebuilt. Persistent=true so a VM that was down on Friday
@@ -20,11 +21,18 @@ Type=oneshot
 User=%i
 WorkingDirectory=${REPO_DIR}
 EnvironmentFile=-${REPO_DIR}/.env
+# claude lives in ~/.local/bin, which systemd's default PATH omits (same as
+# robinhood-agent@.service). Needed by propose-rules.sh.
+Environment=PATH=/home/%i/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 # Rebuild the trade record first, so the review sees the latest fills. The
 # leading '-' keeps a failed rebuild (e.g. Robinhood unreachable for the
 # context fetch) from blocking the review of the record that already exists.
 ExecStartPre=-/usr/bin/python3 ${REPO_DIR}/scripts/trade-record.py
 ExecStart=/usr/bin/python3 ${REPO_DIR}/scripts/weekly-review.py
+# Then draft rule-change proposals -- only if the review raised flags, so a
+# quiet week costs no model call. '-' so a failed draft never fails the review.
+ExecStart=-${REPO_DIR}/scripts/propose-rules.sh
+TimeoutStartSec=20min
 StandardOutput=append:${REPO_DIR}/logs/weekly-review.log
 StandardError=append:${REPO_DIR}/logs/weekly-review.log
 UNIT

@@ -269,6 +269,12 @@ def main():
     path = os.path.join(REVIEWS, f"review-{today}.md")
     with open(path, "w") as fh:
         fh.write("\n".join(full))
+    # Machine-readable twin, for scripts/propose-rules.sh: it drafts rule-change
+    # proposals only when a review actually flags something.
+    with open(os.path.join(REVIEWS, f"review-{today}.json"), "w") as fh:
+        json.dump({"date": today, "flags": fl, "min_n": MIN_N,
+                   "current_rules": stats(current), "all_time": stats(closed),
+                   "report": f"state/reviews/review-{today}.md"}, fh, indent=1)
 
     cs, al = stats(current), stats(closed)
     card = [f"# Scorecard ({today}, from the weekly review)", "",

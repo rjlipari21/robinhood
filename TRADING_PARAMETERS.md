@@ -169,33 +169,46 @@ is the lever, not restoring the cadence.
   already at its cap. Rungs are added on confirmation, never on a further
   drop.
 
-### Laddering OUT (distribute into trending highs)
-- Sell one rung at +1.5% above average cost, a second at +3%, the last at
-  +5% — each as a limit order into strength (tightened from 2/4/6% so
-  winners round-trip faster and free up settled cash for the next entry).
-- Accelerate the ladder out (sell the next rung immediately, regardless of
-  the price step) when MICRO (5-min) RSI ≥ 65, or MICRO trend flips DOWN
-  with two consecutive lower 5-minute highs — these are the primary exit
-  triggers and fire without waiting on macro. MACRO flipping to DOWN-ACCEL
-  while the position is green is an additional, faster trigger to exit.
-- **RSI exits need a +2% gain first** (owner instruction, 2026-10-01). An RSI
-  ≥ 65 reading — 5-minute or hourly — only triggers a sale when the position
-  is already at least +2% above average cost. Below that, hold, and let the
-  price targets, the protective exit and the earnings exit govern it. Reason:
-  over the first 30 closed trades (2026-08-25 → 09-29) the average win was
-  +$2.00 against an average loss of −$5.95. Many wins were RSI exits taken at
-  +0–1.5% (HLN +0.6%, NKE 0.0%, KO −0.03%, AFRM +0.9%, PFE +1.3%, FCX +1.5%),
-  while losses ran the full −5%. RSI ≥ 65 on a stock that has only bounced
-  back to its entry price is a recovery, not strength worth selling.
-- Hold the remaining rungs while MICRO trend state stays UP — a runner is
-  how the ladder pays for the small losses.
+### Exits (rewritten 2026-10-01 to match the rules the agent runs)
+These replace the 3-rung "Laddering OUT" scheme added 2026-08-24 (sell a
+third at +1.5%, +3% and +5%, sped up by 5-minute RSI and MICRO/MACRO trend
+flips). `CLAUDE.md` and the run prompt never adopted that scheme, and at
+hourly runs the agent sees only one 5-minute bar in twelve, so triggers built
+on them cannot fire as intended. Every exit now sells the **whole position in
+one limit order**.
 
-### Protective exit (unchanged, overrides the ladder)
-- Close the ENTIRE position (all rungs at once, not laddered) when it is
-  down ≥5% from average cost, or when trend state prints DOWN and the
-  position is red. Stop orders are regular-hours-only, so this is enforced
-  by each run placing a limit sell.
-- No averaging down: a rung is never added below the previous rung's fill.
+- **Protective exit — checked first, every run.** Sell the whole position
+  when it is down ≥5% from average cost. There are no stop orders, so this
+  only happens when a run checks and places the limit sell. Because runs are
+  an hour apart, fills land a little past the line: −5.0% to −5.5% so far.
+  The 09:30 run matters most, since it is the first look after 17.5 hours.
+- **Profit exit.** Sell into strength with a limit order when any of these
+  holds:
+  - up +3–5% from entry;
+  - hourly RSI ≥ 65 **and** up at least +2% from entry;
+  - price at the upper end of its recent range.
+- **RSI exits need a +2% gain first** (owner instruction, 2026-10-01). Below
+  +2%, an RSI ≥ 65 reading is not an exit: hold, and let the other exits
+  govern it. Reason: over the first 30 closed trades (2026-08-25 → 09-29) the
+  average win was +$2.00 against an average loss of −$5.95. Many wins were
+  RSI exits taken at +0–1.5% (HLN +0.6%, NKE 0.0%, KO −0.03%, AFRM +0.9%,
+  PFE +1.3%, FCX +1.5%), while losses ran the full −5%. RSI ≥ 65 on a stock
+  that has only bounced back to its entry price is a recovery, not strength
+  worth selling.
+- **Earnings exit.** Close a holding before it reports — see "News &
+  catalyst screen" below for the exact 14:30 / 15:30 trigger.
+- **News on a triggered exit.** When a holding crosses a threshold, check its
+  news before selling. That never makes the protective exit optional; it
+  records whether the move was company-specific or market-wide (see "News &
+  catalyst screen").
+- **Averaging down: at most once per position**, never into company-specific
+  bad news, and the whole position stays within the $150 per-name cap.
+
+Dropped with the ladder: selling in thirds; 5-minute RSI ≥ 65 and MICRO
+trend-flip exits; the MACRO DOWN-ACCEL exit; and the extra protective trigger
+"trend state DOWN while the position is red". The old line "no averaging
+down: a rung is never added below the previous rung's fill" is replaced by
+the at-most-once rule above, which is what `CLAUDE.md` has always said.
 
 ## Circuit breakers
 - If total account value falls below $850 (−15%), stop opening new

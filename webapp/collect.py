@@ -876,7 +876,7 @@ def guidelines() -> dict:
             ("agent", "Check the news behind a triggered position before selling. "
                       "It does not make the exit discretionary — it records "
                       "whether the move was company-specific or market noise."),
-            ("agent", "Never average down into a position more than once."),
+            ("agent", "Never average down — never buy more of a name already held."),
         ]),
         ("Circuit breakers", [
             ("agent", f"Below {money(L['circuit_breaker_value_usd'])} of account "

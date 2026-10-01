@@ -22,7 +22,7 @@ $150 per-order buy cap, 50 buys/day, the `state/HALT` kill switch.
 
 **Yours to enforce (the hook cannot see account state):** the 9-position
 ceiling, the ≥10% cash reserve, the $850 circuit breaker, settled-funds
-discipline, the averaging-down limit, and every technical criterion below.
+discipline, the no-averaging-down rule, and every technical criterion below.
 Verify these against Robinhood each run — never against the journal alone.
 
 ## Account rules (non-negotiable)
@@ -49,12 +49,13 @@ Verify these against Robinhood each run — never against the journal alone.
 
 - Max **$150 per name** (~15% of a ~$1,000 account). The hook rejects any
   buy where `quantity × limit_price` exceeds $150. The hook checks each order
-  separately, so keeping the *whole* position (including any averaging-down
-  add) at or under $150 is up to you. A stock trading above $150 a share
+  separately; since you never add to a position, one buy is the whole
+  position. A stock trading above $150 a share
   cannot be bought at all — skip it rather than trying to fit it. Lowered
   from $500 on 2026-10-01: the largest positions were the ones that lost
   most (RVMD, CCJ, MGM). See `TRADING_PARAMETERS.md`.
-- Max **9 concurrent positions**. One position per ticker.
+- Max **9 concurrent positions**. One position per ticker, opened with one
+  buy and never added to.
 - Keep **≥10% of account value in cash** at all times. Check `get_portfolio`
   before every buy — if the buy would breach the reserve, skip it.
 - Max **50 buy orders per day** — hook-enforced.
@@ -235,7 +236,11 @@ thinner, so widen your read of the price book before leaning on a fill there.
   beside the entry price.** Thereafter the check is arithmetic against dates you
   already hold. Re-fetch for a single holding only when its recorded date is
   within 3 trading days and was `verified: false`, since tentative dates move.
-- **No averaging down more than once** per position.
+- **Never average down.** Do not buy more of a name you already hold — not
+  once, not on a "better" price. Restored 2026-10-01: a position that has
+  fallen is the one the strategy was wrong about, and adding to it doubles
+  the bet just as the −5% exit gets closer. If you like the name again
+  after it is sold, it can be re-entered as a fresh position.
 
 ### Circuit breakers
 

@@ -18,7 +18,7 @@ local ledger:
                      count, HALT switch.
 
   AGENT JUDGMENT     position count, cash reserve, circuit breaker, settled
-                     funds, averaging-down limit, all technical criteria,
+                     funds, no averaging down, all technical criteria,
                      and — importantly — the instrument-type exclusions.
                      The universe is now every US-listed common stock, so
                      nothing here can tell a stock from an ETF, ETP, or

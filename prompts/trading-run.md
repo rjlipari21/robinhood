@@ -210,8 +210,8 @@ committed scripts already does.
    - fewer than 9 open positions, and none already in this ticker
    - the buy keeps ≥10% of account value in cash
    - you are spending settled funds, not unsettled proceeds
-   - size so that quantity × limit_price ≤ $150, and the whole position
-     (counting any earlier fill in this name) stays ≤ $150
+   - size so that quantity × limit_price ≤ $150 (never add to a holding —
+     no averaging down, so this one buy is the whole position)
    - the news/earnings check in 7d found no veto condition
 8. For each order: `review_equity_order` first, inspect the estimate and any
    alerts, then `place_equity_order` with a `ref_id` from step 1. Tag

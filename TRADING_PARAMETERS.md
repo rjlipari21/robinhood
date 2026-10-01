@@ -188,15 +188,17 @@ one limit order**.
   news before selling. That never makes the protective exit optional; it
   records whether the move was company-specific or market-wide (see "News &
   catalyst screen").
-- **Averaging down: at most once per position**, never into company-specific
-  bad news, and the whole position stays within the $150 per-name cap.
+- **Never average down** (restored 2026-10-01 on owner instruction). Never
+  buy more of a name already held. Each position is one buy, so the $150 cap
+  on that buy is the cap on the position. A sold name can be re-entered later
+  as a fresh position.
 
 Dropped with the ladder: selling in thirds; 5-minute RSI ≥ 65 and MICRO
 trend-flip exits; and the MACRO DOWN-ACCEL exit. The extra protective trigger
 "trend state DOWN while the position is red" is kept, as the hourly trend-down
-exit above. The old line "no averaging
-down: a rung is never added below the previous rung's fill" is replaced by
-the at-most-once rule above, which is what `CLAUDE.md` has always said.
+exit above. The old "no averaging down: a rung is never added below the
+previous rung's fill" is kept in its stricter form above: with no rungs,
+nothing is ever added to a position at all.
 
 ## Circuit breakers
 - If total account value falls below $850 (−15%), stop opening new

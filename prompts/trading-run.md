@@ -50,7 +50,8 @@ committed scripts already does.
 4. Manage existing positions FIRST. For each holding, compare against entry:
    - down ≥5% → protective exit, limit sell now
    - up +3–5%, or hourly RSI ≥ 65 while up at least +2%, or at the upper
-     end of its recent range → sell into strength with a limit sell. RSI ≥ 65
+     end of its recent range (dip entries only, never momentum entries)
+     → sell into strength with a limit sell. RSI ≥ 65
      with the position below +2% is NOT an exit: hold it.
    There are no stop orders, so an unchecked losing position is unprotected.
    Batch what you can: `get_equity_quotes` and `get_equity_historicals` both
@@ -117,14 +118,19 @@ committed scripts already does.
       call — do not rebuild this pipeline by hand.
       Read its header lines: they report how many rows the scanner truncated,
       and how many eligible names the top-50 cap cut.
+      Then run **`python3 scripts/momentum-candidates.py`** for Path B
+      (momentum) candidates. It is a separate, short list — breakouts above
+      the 10-day high — and is never merged into the top 50. If it fails it
+      says so on one line: skip momentum entries this run, nothing else.
    b. Rows marked `FUND?` have fund-like names. The scanner labels closed-end
       funds as `Asset type: STOCK`, so it cannot screen them out and neither
       can the script — that flag is a prompt to check, and CLAUDE.md says skip
       if unsure. REITs are common stocks and are fine. An unflagged row is not
       automatically a common stock either; the flag catches the obvious cases
       only.
-   c. Only now spend per-name calls: work down the 50 with
-      historicals/technicals against the entry criteria in CLAUDE.md, and stop
+   c. Only now spend per-name calls: work down the 50 (Path A) and the
+      momentum list (Path B) with historicals/technicals against the entry
+      criteria in CLAUDE.md, and stop
       as soon as you have enough conviction to act or have run out of setups
       worth taking. You do not have to analyse all 50 — in practice you should
       look at far fewer.

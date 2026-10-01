@@ -5,6 +5,7 @@
       "Read",
       "Edit(state/**)",
       "Bash(python3 scripts/news-brief.py *)",
+      "Bash(python3 scripts/momentum-candidates.py)",
       "mcp__robinhood-trading__get_accounts",
       "mcp__robinhood-trading__get_portfolio",
       "mcp__robinhood-trading__get_equity_positions",

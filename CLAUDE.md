@@ -114,11 +114,31 @@ thin drift.
 
 ### Entry — buy the trending low
 
-Buy an uptrending or basing name that has pulled back to support. Any of:
+Two entry paths. Either one can open a position; both pass every check
+below (bars, market filter, news, earnings, limits).
+
+**Path A — dip-buy.** Buy an uptrending or basing name that has pulled back
+to support. Any of:
 
 - hourly RSI ≤ 35; or
 - price near the lower end of its 5–10 day range; or
 - a 2%+ dip in a name whose higher-timeframe trend is still up.
+
+**Path B — momentum-buy.** Buy a name in a confirmed uptrend that has just
+broken out to new highs on heavy volume. Candidates come from
+`python3 scripts/momentum-candidates.py`, not from the dip scans. All of:
+
+- price above its 50-day average and above its prior 10-day high, with the
+  last **completed hourly close** above that high (not just an intraday wick);
+- hourly RSI between 50 and 68 — skip at 68 or above, it is already extended;
+- the breakout hour's volume above the recent hourly average;
+- price **no more than +2% past the 10-day high** (`past_brk` in the script's
+  output). Further past it, you are chasing: the −5% exit would sit well
+  above the breakout level that should act as support.
+
+Record the path in the journal beside the entry (`entry: dip` or
+`entry: momentum`, plus the breakout level for Path B), because the exits
+treat them differently.
 
 **News screen before any buy.** Once a name has passed technicals and you
 intend to buy it — and only then — run `python3 scripts/news-brief.py TICKER`
@@ -153,7 +173,9 @@ thinner, so widen your read of the price book before leaning on a fill there.
 ### Exit — sell the trending high
 
 - **Profit target:** +3–5% from entry, or hourly RSI ≥ 65 **with the position
-  at least +2% above entry**, or price at the upper end of its recent range.
+  at least +2% above entry**, or price at the upper end of its recent range
+  (dip entries only — a momentum entry is bought at the top of its range by
+  design, so that trigger would sell it on the next run).
   Sell into strength with a limit order. Below +2%, an RSI ≥ 65 reading is
   not an exit — hold. Selling those cheap bounces is what kept the average
   win near +$2 against average losses near −$6; `TRADING_PARAMETERS.md` has

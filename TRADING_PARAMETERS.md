@@ -89,10 +89,33 @@ agent sees one 5-minute bar in twelve, so triggers built on single 5-minute
 bars cannot fire as written. Every entry is now **one limit buy** for the
 whole position.
 
-Buy an uptrending or basing name that has pulled back to support. Any of:
+Two entry paths; either can open a position.
+
+**Path A — dip-buy.** Buy an uptrending or basing name that has pulled back
+to support. Any of:
 - hourly RSI ≤ 35 (both saved scans already filter to this);
 - price near the lower end of its 5–10 day range;
 - a 2%+ dip in a name whose higher-timeframe trend is still up.
+
+**Path B — momentum-buy** (restored 2026-10-01 on owner instruction, adapted
+to hourly runs). Buy a confirmed uptrend that has just broken out on heavy
+volume. The dip scans cannot surface these, so candidates come from
+`scripts/momentum-candidates.py`, which runs a live `preview_scan` (nothing
+saved): common stock, price > $5, market cap > $300M, average volume > 500K,
+hourly RSI 50–68, price above its 50-day average and above the prior 10-day
+high, relative volume ≥ 1.5 pro-rated by how much of the session has passed.
+The agent then requires:
+- the last completed hourly close above the 10-day high, not just a wick;
+- hourly RSI below 68;
+- the breakout hour's volume above the recent hourly average;
+- price no more than +2% past the 10-day high — further is chasing, and
+  puts the −5% exit well above the breakout level.
+The journal records `entry: dip` or `entry: momentum` (with the breakout
+level), because the range-top profit exit does not apply to momentum entries.
+
+Untested at this cadence. The old Path B was tuned on 5-minute bars and
+fired only on names surfaced by the dip scans, so there is no track record
+for this version. Judge it on its own trades after a few weeks.
 
 Before buying:
 - **Confirm on bars, never a quote alone** — `get_equity_historicals` and
@@ -109,9 +132,10 @@ Before buying:
 
 Dropped with the ladder: buying in thirds (rungs 2 and 3 added on 5-minute
 confirmation); the 5-minute RSI ≤ 42 and "RSI troughed and turned up" dip
-triggers; **Path B momentum buys** (5-minute RSI 45–68 breakouts on rising
-volume); and the MICRO/MACRO trend states, including the DOWN-ACCEL gate,
-whose job is now done by the successive-lower-closes check.
+triggers; the 5-minute version of Path B (RSI 45–68 breakouts above the
+prior 3-bar high, now hourly as above); and the MICRO/MACRO trend states,
+including the DOWN-ACCEL gate, whose job is now done by the successive-lower-
+closes check.
 
 ### Exits (rewritten 2026-10-01 to match the rules the agent runs)
 These replace the 3-rung "Laddering OUT" scheme added 2026-08-24 (sell a
@@ -130,7 +154,9 @@ one limit order**.
   holds:
   - up +3–5% from entry;
   - hourly RSI ≥ 65 **and** up at least +2% from entry;
-  - price at the upper end of its recent range.
+  - price at the upper end of its recent range — **dip entries only**. A
+    momentum entry is bought at the top of its range by design, so this
+    trigger would sell it on the next run.
 - **RSI exits need a +2% gain first** (owner instruction, 2026-10-01). Below
   +2%, an RSI ≥ 65 reading is not an exit: hold, and let the other exits
   govern it. Reason: over the first 30 closed trades (2026-08-25 → 09-29) the

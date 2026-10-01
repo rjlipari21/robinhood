@@ -39,8 +39,8 @@ committed scripts already does.
 3. Check the circuit breaker: if total account value is below $850, open no
    new positions this run. Manage exits only and say so in the journal.
 
-   Then the market filter from step 1. If it says **NO-NEW-BUYS** (SPY below
-   its 20-day average, or down 1% or more today), open no new positions this
+   Then the market filter from step 1. If it says **NO-NEW-BUYS** (SPY down
+   1% or more today), open no new positions this
    run: do steps 4, 5, 9 and 10 as normal and skip 6–8 for buys. Do not
    re-derive SPY's numbers or argue with the verdict. Exits are never gated.
    If it says **CHECK FAILED**, call `get_equity_quotes` and
@@ -238,12 +238,25 @@ committed scripts already does.
    line is:
    `{"order_id","symbol","side","quantity","average_price","filled_at"}`
    — plus `"pnl_pct"` on a sell, computed against the entry price from the
-   journal, and an optional short `"note"`. Append only; never rewrite or
+   journal, and an optional short `"note"`.
+
+   **Learning fields** — these feed `state/trades.jsonl`, the per-trade
+   record the weekly review judges each rule on, so fill them in every time:
+   - on a **buy**: `"entry_path"` (`"dip"` or `"momentum"`), `"rsi_1h"` and
+     `"relvol"` as you read them when deciding, and for momentum
+     `"breakout_level"` (the 10-day high it broke).
+   - on a **sell**: `"exit_reason"`, exactly one of `"protective"`,
+     `"trend-down"`, `"profit-target"`, `"rsi"`, `"range-top"`, `"earnings"`,
+     `"news"` — the rule that actually fired.
+   For a fill from an earlier run, take these from that run's journal entry.
+   Append only; never rewrite or
    reorder existing lines, and never re-add an order_id already present.
    Dedupe and delivery are handled downstream, so a line here is enough.
    After you exit, `scripts/reconcile-fills.py` adds any fill you missed,
    marked as missed. That is a backstop, not a substitute: its lines carry no
    reasoning and only an approximate P/L, and each one is counted against you.
+   Then `scripts/trade-record.py` captures market and analyst context for new
+   buys and rebuilds `state/trades.jsonl`. Never edit either file yourself.
 10. Append a complete journal entry to `state/journal.md` (date/time ET,
    positions with entry prices, orders placed with ref_ids and fill status,
    observations, watch items for next run). Do this even if you placed no
@@ -261,5 +274,6 @@ Write scratch files, if you need any at all, to `state/tmp/` — not to `state/`
 or `/tmp`. You cannot delete files in this headless run, so anything you leave
 elsewhere accumulates.
 
-Be decisive but conservative: when a setup is marginal, skip it. Most runs
-should place zero orders.
+Be decisive: buy every setup that meets the written criteria and limits.
+Skip anything that does not, with the failed criterion named in the journal —
+"marginal" or "choppy market" is not a reason on its own.

@@ -860,8 +860,8 @@ def guidelines() -> dict:
                       "days."),
             ("agent", "Check book depth and average volume: a limit order in a "
                       "thin name sits unfilled or fills badly."),
-            ("agent", "When a setup is marginal, skip it. Most runs should place "
-                      "no orders at all."),
+            ("agent", "A setup that meets every criterion is a buy. Skip only "
+                      "for a named reason, recorded in the journal."),
         ]),
         ("Exit — sell the trending high", [
             ("agent", "Protective exit: close any position down 5% or more from "

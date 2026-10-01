@@ -191,6 +191,9 @@ rc=0
   # and appends any the agent failed to record, so a missed step 9 still
   # reaches the phone. The ABNB sell on 2026-09-03 never did.
   python3 scripts/reconcile-fills.py || true
+  # Rebuild the per-trade learning record (state/trades.jsonl) and capture
+  # market + analyst context for new buys while it still describes the entry.
+  python3 scripts/trade-record.py || true
   python3 hooks/notify.py fills || true
 
   echo "===== run finished $(date -u +%FT%TZ) rc=$rc ====="

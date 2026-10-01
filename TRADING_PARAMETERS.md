@@ -122,13 +122,20 @@ Before buying:
   `get_equity_technical_indicators`. A name making successive lower closes may
   still be falling rather than basing; skip it.
 - **Pass the market filter** (see "Circuit breakers"): no new buys while SPY
-  is below its 20-day average or down 1% or more on the day.
+  is down 1% or more on the day.
 - **Pass the news and earnings screen** (see "News & catalyst screen"),
   including the veto on earnings inside the next 2 trading days.
 - **Fit the limits** in "Position sizing & limits": $150 per name in total,
   ≤ 9 positions, ≥ 10% cash, settled funds only.
 - Place a marketable limit at or near the bid–ask, tagged `regular_hours`.
-- When a setup is marginal, skip it. Most runs should buy nothing.
+- **A setup that meets every criterion is a buy** (owner instruction,
+  2026-10-01: trade more, to build the learning record faster). Skip only for
+  a named reason — a failed criterion, a news or earnings veto, a limit —
+  recorded in the journal. A general read of market mood is not a reason; the
+  market filter is the only market-wide gate. Before this, the agent skipped
+  every candidate across all 7 runs on 2026-09-30 as "marginal" in a
+  "post-capitulation" market. The $150 cap is what makes this affordable: a
+  −5% exit costs about $7.50.
 
 Dropped with the ladder: buying in thirds (rungs 2 and 3 added on 5-minute
 confirmation); the 5-minute RSI ≤ 42 and "RSI troughed and turned up" dip
@@ -206,7 +213,12 @@ nothing is ever added to a position at all.
 - Any order rejection, unexpected balance, or tool failure: halt trading
   for that run and notify.
 - **Market filter** (owner instruction, 2026-10-01): no new positions while
-  SPY is below its 20-day average close, or is down 1% or more on the day.
+  SPY is down 1% or more on the day. Adopted the same day with a second
+  condition, SPY below its 20-day average close; that was dropped hours later
+  when the owner asked for more trades, as it blocked a third of sessions
+  (below). SPY's position against the average is still recorded on every
+  entry in `state/trades.jsonl`, so the weekly review can test whether it
+  should come back.
   Gates entries only; exits are never blocked. Computed VM-side each run by
   `scripts/market-regime.py` (via `scripts/run-context.sh`). If that fails,
   the agent applies the same rule from SPY quotes and daily bars itself, and

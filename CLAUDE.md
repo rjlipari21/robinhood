@@ -163,8 +163,13 @@ If the script fails it says why on one line — fall back to the
 
 Confirm with `get_equity_historicals` and `get_equity_technical_indicators` —
 never on a quote alone. Check the higher-timeframe trend before buying a dip:
-a name making successive lower closes may still be falling, not basing. When a
-setup is marginal, skip it.
+a name making successive lower closes may still be falling, not basing.
+
+A setup that meets every written criterion is a buy. Skip it only for a
+named reason — a criterion it fails, a news or earnings veto, or a limit —
+and write that reason in the journal. Do not skip on a general read of
+market mood ("post-capitulation", "choppy tape"): the market filter is the
+only market-wide gate.
 
 Place a marketable limit at or near the bid-ask, `market_hours:
 regular_hours` — or `extended_hours` when you are running pre- or post-market
@@ -249,14 +254,18 @@ thinner, so widen your read of the price book before leaning on a fill there.
   wait for owner instructions.
 - On any order rejection, unexpected balance, or tool failure: stop trading
   for that run and write what happened in the journal.
-- **Market filter:** open no new positions while SPY is below its 20-day
-  average close, or is down 1% or more on the day. `scripts/run-context.sh`
+- **Market filter:** open no new positions while SPY is down 1% or more on
+  the day. (SPY below its 20-day average no longer blocks buys; the line
+  still reports it, for the trade record.) `scripts/run-context.sh`
   prints the verdict as a `MARKET:` line every run. This gates buys only —
   exits run as normal. A pullback in one name is the setup; a pullback that
   is just the whole market falling is not.
 
-If nothing meets the criteria, DO NOTHING. Most runs should place zero
-orders. Sitting in cash is an acceptable and common outcome.
+If nothing meets the criteria, do nothing — sitting in cash is fine. But when
+a setup does meet them, buy it. At $150 a position a −5% exit costs about
+$7.50, and the strategy can only be judged on trades it actually takes:
+since 2026-10-01 more trades is an explicit owner goal, because every trade
+feeds `state/trades.jsonl`.
 
 ## Cadence
 
@@ -296,8 +305,8 @@ Two things follow from that, and both matter:
   check before anything else, as always, but treat the 09:30 run as the one
   most likely to need action.
 
-Most runs should still place nothing. A wake-up is not a reason to trade —
-when a setup is marginal, skip it.
+A wake-up is not a reason to trade, and a quiet market is not a reason not
+to: buy what meets the criteria, skip what does not, and say why.
 
 ## State and journal
 
@@ -305,6 +314,11 @@ when a setup is marginal, skip it.
   append a dated entry: positions held (with entry price and date), what you
   observed, any orders placed (with ref_ids), and what you're watching for
   next run. At the start of every run, read the last few entries first.
+- `state/trades.jsonl` — one line per trade (entry path and signals, SPY
+  verdict and analyst ratings at entry, exit reason, hold time, P/L), rebuilt
+  after every run by `scripts/trade-record.py` from `fills.jsonl`. It is the
+  data the strategy is judged on, which is why the learning fields in step 9
+  of the run prompt matter. Do not edit it.
 - `state/ledger.json` — machine-written record of executed orders (do not
   edit it; the hooks maintain it).
 - If the file `state/HALT` exists, the owner has pulled the kill switch:

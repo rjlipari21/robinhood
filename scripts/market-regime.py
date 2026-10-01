@@ -2,7 +2,8 @@
 """Market filter: may this run open new positions, judged by SPY?
 
 Rule (TRADING_PARAMETERS.md, owner instruction 2026-10-01): no new buys while
-SPY is below its 20-day average close, or is down 1% or more on the day.
+SPY is down 1% or more on the day. The 20-day-average condition it started
+with is switched off (USE_SMA_RULE) but still computed and reported.
 Exits are never affected -- this gates entries only.
 
 Why: a pullback in a single name is the setup this strategy wants; a pullback
@@ -35,6 +36,9 @@ from zoneinfo import ZoneInfo
 SYMBOL = "SPY"
 SMA_DAYS = 20
 MAX_DAY_DROP_PCT = -1.0
+# Off since 2026-10-01 (owner: trade more). Still computed and reported, so
+# state/trades.jsonl records it on every entry for the weekly review.
+USE_SMA_RULE = False
 LOOKBACK_CALENDAR_DAYS = 45      # ~30 sessions, comfortably over 20
 ET = ZoneInfo("America/New_York")
 
@@ -69,7 +73,8 @@ def tool_data(result):
     die(5, "no data envelope in tool result")
 
 
-def main():
+def connect():
+    """Open an MCP session. Returns (token, session)."""
     token = nb.access_token()
     _, hdrs = nb.rpc(token, "initialize", {
         "protocolVersion": "2025-06-18",
@@ -78,17 +83,24 @@ def main():
     }, 1, None)
     session = hdrs.get("Mcp-Session-Id") or hdrs.get("mcp-session-id")
     nb.rpc(token, "notifications/initialized", {}, None, session)
+    return token, session
 
+
+def regime(token, session, rpc_id=10):
+    """Compute the verdict. Returns a dict; dies (exits) on failure.
+
+    Shared with scripts/trade-record.py, which stores this beside each entry.
+    """
     today = dt.datetime.now(ET).date()
     start = (today - dt.timedelta(days=LOOKBACK_CALENDAR_DAYS)).isoformat()
     hist, _ = nb.rpc(token, "tools/call", {
         "name": "get_equity_historicals",
         "arguments": {"symbols": [SYMBOL], "interval": "day",
                       "start_time": f"{start}T00:00:00Z"},
-    }, 10, session)
+    }, rpc_id, session)
     quote, _ = nb.rpc(token, "tools/call", {
         "name": "get_equity_quotes", "arguments": {"symbols": [SYMBOL]},
-    }, 11, session)
+    }, rpc_id + 1, session)
 
     try:
         bars = tool_data(hist)["results"][0]["bars"]
@@ -120,19 +132,29 @@ def main():
         die(6, f"only {len(series)} completed daily closes, need {SMA_DAYS}")
     sma = sum(series) / SMA_DAYS
     day_pct = (last / prev - 1) * 100
-    vs_sma_pct = (last / sma - 1) * 100
 
     reasons = []
-    if last < sma:
+    if USE_SMA_RULE and last < sma:
         reasons.append(f"below its {SMA_DAYS}-day average")
     if day_pct <= MAX_DAY_DROP_PCT:
         reasons.append(f"down {day_pct:.2f}% today")
-    verdict = "NO-NEW-BUYS" if reasons else "BUYS-OK"
-    detail = (f"{SYMBOL} {last:.2f}, {SMA_DAYS}d avg {sma:.2f} "
-              f"({vs_sma_pct:+.2f}%), today {day_pct:+.2f}% "
-              f"vs prior close {prev:.2f}")
-    why = f" -- {SYMBOL} is {' and '.join(reasons)}" if reasons else ""
-    print(f"MARKET: {verdict}{why}. {detail}")
+    return {
+        "verdict": "NO-NEW-BUYS" if reasons else "BUYS-OK",
+        "reasons": reasons,
+        "spy": round(last, 2),
+        "sma20": round(sma, 2),
+        "vs_sma_pct": round((last / sma - 1) * 100, 2),
+        "day_pct": round(day_pct, 2),
+        "prev_close": round(prev, 2),
+    }
+
+
+def main():
+    r = regime(*connect())
+    why = f" -- {SYMBOL} is {' and '.join(r['reasons'])}" if r["reasons"] else ""
+    print(f"MARKET: {r['verdict']}{why}. {SYMBOL} {r['spy']:.2f}, "
+          f"{SMA_DAYS}d avg {r['sma20']:.2f} ({r['vs_sma_pct']:+.2f}%), "
+          f"today {r['day_pct']:+.2f}% vs prior close {r['prev_close']:.2f}")
     return 0
 
 

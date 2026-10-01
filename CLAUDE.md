@@ -190,6 +190,21 @@ thinner, so widen your read of the price book before leaning on a fill there.
 - **Protective exit:** close any position down **≥5%** from entry with a limit
   sell. There are no stop orders here, so this only happens if you check and
   act — do it first, every run, before looking for entries.
+- **Trend-down exit:** close the whole position, before it reaches −5%, when
+  all three, read on **hourly bars completed since the entry fill**:
+  1. the position is red (below entry);
+  2. each of the last 3 completed hourly bars made a lower high **and** a
+     lower low than the bar before it (4 bars, all after the fill);
+  3. the last completed hourly close is below the 20-hour EMA, and that EMA
+     is falling (latest value below the one 2 bars earlier) —
+     `get_equity_technical_indicators` with `type: ema`, `period: 20`,
+     `interval: hour`, `output: last:3`.
+  Only bars after the fill count: a dip-buy is bought *while* price is under
+  a falling average, so judged on pre-entry bars this would sell every dip
+  the run after buying it. Needing 4 completed hourly bars after the fill
+  means it cannot fire until the afternoon after a morning buy, or the next
+  day. Its job is cutting a loser
+  whose trend has turned against it, early and small.
 - **Earnings exit — close a holding before it reports.** The earnings veto in
   the entry rules stops you *buying* into a print; this stops you *holding*
   through one. The trigger is:

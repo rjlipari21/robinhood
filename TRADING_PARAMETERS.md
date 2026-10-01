@@ -150,6 +150,23 @@ one limit order**.
   only happens when a run checks and places the limit sell. Because runs are
   an hour apart, fills land a little past the line: −5.0% to −5.5% so far.
   The 09:30 run matters most, since it is the first look after 17.5 hours.
+- **Trend-down exit** (restored 2026-10-01 on owner instruction, adapted to
+  hourly runs). Sell the whole position, before it reaches −5%, when
+  all three, read on **hourly bars completed since the entry fill**:
+  1. the position is red (below entry);
+  2. each of the last 3 completed hourly bars made a lower high **and** a
+     lower low than the bar before it (4 bars, all after the fill);
+  3. the last completed hourly close is below the 20-hour EMA, and that EMA
+     is falling (latest value below the one 2 bars earlier) —
+     `get_equity_technical_indicators` with `type: ema`, `period: 20`,
+     `interval: hour`, `output: last:3`.
+  Changes from the 5-minute original ("trend state DOWN while the position is
+  red", where DOWN was lower highs and lows *or* a close under a falling
+  EMA): it now needs both conditions, and only bars after the entry fill
+  count. Either change alone is not enough — a dip-buy is bought while price
+  is under a falling average, so the original would sell it the run after
+  buying. Untested at this cadence; in late August the 5-minute version cut
+  UEC at −1.85% and CCJ at −2.28%.
 - **Profit exit.** Sell into strength with a limit order when any of these
   holds:
   - up +3–5% from entry;
@@ -175,8 +192,9 @@ one limit order**.
   bad news, and the whole position stays within the $150 per-name cap.
 
 Dropped with the ladder: selling in thirds; 5-minute RSI ≥ 65 and MICRO
-trend-flip exits; the MACRO DOWN-ACCEL exit; and the extra protective trigger
-"trend state DOWN while the position is red". The old line "no averaging
+trend-flip exits; and the MACRO DOWN-ACCEL exit. The extra protective trigger
+"trend state DOWN while the position is red" is kept, as the hourly trend-down
+exit above. The old line "no averaging
 down: a rung is never added below the previous rung's fill" is replaced by
 the at-most-once rule above, which is what `CLAUDE.md` has always said.
 

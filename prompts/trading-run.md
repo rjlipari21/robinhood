@@ -49,6 +49,12 @@ committed scripts already does.
    no new positions. Record the verdict line in the journal either way.
 4. Manage existing positions FIRST. For each holding, compare against entry:
    - down ≥5% → protective exit, limit sell now
+   - red, AND the last 3 hourly bars since entry each made a lower high and
+     lower low, AND the last hourly close is under a falling 20-hour EMA →
+     trend-down exit, limit sell now (see CLAUDE.md; bars before the entry
+     fill never count). The bars come from the batched historicals; spend the
+     per-symbol EMA call only on a red holding whose bars already show the
+     lower highs and lows.
    - up +3–5%, or hourly RSI ≥ 65 while up at least +2%, or at the upper
      end of its recent range (dip entries only, never momentum entries)
      → sell into strength with a limit sell. RSI ≥ 65

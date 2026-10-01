@@ -51,11 +51,6 @@ analysis is the expensive part of a run, and 50 candidates is far more than
 the 9-position ceiling can absorb. Names cut this run are not blacklisted —
 the ranking is recomputed from scratch every pass.
 
-KNOWN GAP: because both scans filter to hourly RSI <= 35, Path B
-(momentum-buy: MICRO trend UP, 5-min RSI 45-68, breakout on rising volume)
-has no scanner feeding it — a breakout candidate is structurally excluded
-from scan output. Path B currently only fires on names already surfaced for
-another reason. Closing this needs a third saved scan on the Path B band.
 - Exclusions: no ETFs or other funds (ETPs, leveraged/inverse products,
   closed-end funds), no options, no crypto, no margin.
 - 24 Hour Market eligibility is not considered: since orders are never
@@ -84,90 +79,39 @@ another reason. Closing this needs a third saved scan on the Path B band.
   are not re-spendable until the next day, so realized trade count will
   usually be well below the 50/day ceiling.
 
-## Micro-led trend ladder, with macro as context only (real-time trend state)
+## Entries and exits
 
-Every run, recompute each candidate's and each holding's trend state on TWO
-timeframes from LIVE data (get_equity_technical_indicators /
-get_equity_historicals) — never rely on a stored state from a previous run.
-MICRO leads: it is the primary driver for both entries and exits. MACRO is
-context used only to veto a genuinely accelerating downtrend, not a
-mandatory precondition for every entry.
+### Entries (rewritten 2026-10-01 to match the rules the agent runs)
+These replace the "micro-led trend ladder" added 2026-08-24, which bought in
+three rungs off 5-minute RSI and MICRO/MACRO trend states. As with the exits
+below, `CLAUDE.md` and the run prompt never adopted it, and at hourly runs the
+agent sees one 5-minute bar in twelve, so triggers built on single 5-minute
+bars cannot fire as written. Every entry is now **one limit buy** for the
+whole position.
 
-- MICRO trend (primary, from the last 6-8 completed 5-MINUTE bars, extended
-  hours, plus live 5-min RSI): sets both whether and exactly when to fire —
-  don't wait for an hourly bar to close to confirm what 5-minute bars
-  already show; use minute-level data to catch a turn as it happens, the
-  way MET/TAL's RSI cooling from 100→72→63 was tracked intraday rather than
-  waiting for the hour to close.
-- MACRO trend (secondary, from the last 6 completed HOURLY bars): used only
-  to screen out names in an ACCELERATING hourly downtrend (see DOWN-ACCEL
-  below), not to veto every hourly dip. A mildly/slowly falling hourly EMA
-  with price only marginally below it no longer blocks an otherwise-good
-  micro setup — that was screening out too many real entries.
+Buy an uptrending or basing name that has pulled back to support. Any of:
+- hourly RSI ≤ 35 (both saved scans already filter to this);
+- price near the lower end of its 5–10 day range;
+- a 2%+ dip in a name whose higher-timeframe trend is still up.
 
-Trend state:
-- UP        — higher highs and higher lows, or close above the 20-bar EMA
-              with a rising slope.
-- FLAT      — neither; chop or a basing range.
-- DOWN      — lower highs and lower lows, or close below a falling 20-bar
-              EMA.
-- DOWN-ACCEL (macro only) — DOWN, and the gap between price and the falling
-              EMA is widening bar-over-bar (not just narrowly below it) —
-              this is the only macro state that blocks a new entry.
+Before buying:
+- **Confirm on bars, never a quote alone** — `get_equity_historicals` and
+  `get_equity_technical_indicators`. A name making successive lower closes may
+  still be falling rather than basing; skip it.
+- **Pass the market filter** (see "Circuit breakers"): no new buys while SPY
+  is below its 20-day average or down 1% or more on the day.
+- **Pass the news and earnings screen** (see "News & catalyst screen"),
+  including the veto on earnings inside the next 2 trading days.
+- **Fit the limits** in "Position sizing & limits": $150 per name in total,
+  ≤ 9 positions, ≥ 10% cash, settled funds only.
+- Place a marketable limit at or near the bid–ask, tagged `regular_hours`.
+- When a setup is marginal, skip it. Most runs should buy nothing.
 
-Rung size = 1/3 of the name's intended full position (so 3 rungs reach the
-target; the $150 per-name cap is the ceiling on the FULL position, not on
-a rung). Never hold more than 3 rungs in one name.
-
-### Laddering IN — two independent entry paths (either one opens rung 1)
-Background (from the 1-minute-polling era, when this was tuned): polling was
-missing most dips, because 5-min RSI mean-reverts fast enough that a strict
-≤35 read is rarely caught mid-bar, so the account sat in cash through a
-grinding-higher tape. Two changes fixed it: widen the dip trigger, and add a
-second path that buys confirmed strength instead of only buying weakness.
-
-Both widened thresholds still apply at the current hourly cadence, but note
-what that cadence costs them. They were sized when polling landed on every
-5-minute bar boundary; at one hour only one bar in twelve is seen, so a move
-that starts and reverses inside the gap is invisible — not just an intra-bar
-extreme, but a whole twelve-bar excursion. The wide bands are what absorb that,
-and the gap they now have to absorb is four times the one they were sized for.
-If reversals inside the gap start costing real money, widening the bands again
-is the lever, not restoring the cadence.
-
-**Path A — dip-buy (unchanged in spirit, wider trigger):**
-- Rung 1 opens on 5-min RSI ≤ 42 (was ≤35 — the tighter threshold was
-  missing dips that bounced between polls), or price at the lower end of
-  the 5-10 day range, or RSI having troughed and turned up within the last
-  2 completed 5-min bars (catches a dip whose exact bottom fell between
-  polls). Required gates: MICRO trend must not be actively DOWN at the
-  moment of entry (a dip inside chop/basing is fine, a dip still falling on
-  5-min bars is not — wait one more 5-min bar for the micro low to hold);
-  MACRO trend must not be DOWN-ACCEL.
-
-**Path B — momentum-buy (buy strength, not just weakness):**
-- Rung 1 opens when MICRO trend is UP with 5-min RSI in the 45-68 band
-  (confirmed uptrend, not yet overbought — widened from 65 after repeated
-  misses where RSI crossed 65 between polls with no bar landing
-  in-window) AND price has just closed above its prior 3-bar high on
-  rising volume (a live breakout, not a stale high). This lets the
-  strategy act on names already trending up instead of requiring them to
-  dip first. MACRO trend must not be DOWN-ACCEL (loosened from a strict
-  "not DOWN" — that gate was blocking most real breakouts, since an
-  ordinary mildly-falling hourly EMA is common even in a healthy tape;
-  DOWN-ACCEL is now the same bar Path A uses).
-- Skip Path B if 5-min RSI ≥ 68 (too extended — wait for either a pullback
-  into Path A range or a fresh breakout).
-
-**Both paths, rungs 2 and 3:**
-- Rung 2 adds as soon as MICRO trend confirms UP: one completed 5-minute
-  bar closing above its prior 5-minute high, price at/above the rung-1
-  fill. Do not wait for an hourly close.
-- Rung 3 adds on a second consecutive UP 5-minute bar, price at/above
-  rung 2.
-- Stop laddering in if MACRO trend prints DOWN-ACCEL, or the name is
-  already at its cap. Rungs are added on confirmation, never on a further
-  drop.
+Dropped with the ladder: buying in thirds (rungs 2 and 3 added on 5-minute
+confirmation); the 5-minute RSI ≤ 42 and "RSI troughed and turned up" dip
+triggers; **Path B momentum buys** (5-minute RSI 45–68 breakouts on rising
+volume); and the MICRO/MACRO trend states, including the DOWN-ACCEL gate,
+whose job is now done by the successive-lower-closes check.
 
 ### Exits (rewritten 2026-10-01 to match the rules the agent runs)
 These replace the 3-rung "Laddering OUT" scheme added 2026-08-24 (sell a
@@ -327,11 +271,10 @@ the at-most-once rule above, which is what `CLAUDE.md` has always said.
   `config/limits.json` but is unreachable in practice.
 - The overnight 24 Hour Market window is NOT covered, and as of 2026-08-27 is
   not traded at all. Three consequences to hold in mind:
-  - Entry and exit decisions read completed 5-minute bars, but the agent now
-    only sees them every twelfth bar. A move that starts and reverses inside a
-    one-hour gap is invisible; the widened Path A/B trigger bands are what
-    absorb that, and they were sized for a 15-minute gap — if reversals inside
-    the gap start costing real money, widening them again is the lever.
+  - The agent sees prices once an hour, not every 5-minute bar. A move that
+    starts and reverses inside a one-hour gap is invisible, which is why entry
+    and exit triggers are read on hourly RSI, multi-day ranges and percentage
+    moves rather than single 5-minute bars.
   - Nothing manages positions between 16:00 and 09:30 ET — 17.5 unmonitored
     hours, up from 11. The 09:30 run is therefore the first sight of prices
     since the prior close and the one most likely to find a breached

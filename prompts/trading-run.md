@@ -200,11 +200,17 @@ committed scripts already does.
    `review_equity_order` and the estimate is acceptable, place it on the next
    turn. If you are low on turns, placing the order and writing a short
    journal entry beats analysing another candidate.
-9. Record any NEW fills for the owner's phone alerts. From the
-   `get_equity_orders` data you already pulled in step 2, find orders now in
-   state `filled` or `partially_filled` whose `order_id` was not in the
-   already-alerted list from step 1, and append one JSON object per line to
-   `state/fills.jsonl` for each:
+9. Record any NEW fills for the owner's phone alerts. **This step is the only
+   place you write to `state/fills.jsonl`** — not when step 8 confirms a fill,
+   even one that filled instantly. Take the most recent `get_equity_orders`
+   data you hold (step 8's confirmation if you placed anything, else step 2's),
+   find orders in state `filled` or `partially_filled` whose `order_id` is not
+   in the already-alerted list from step 1, and append one JSON object per
+   line to `state/fills.jsonl` for each, in a single write. Each `order_id`
+   gets at most one line per run: the step 1 list is a snapshot from the start
+   of the run and does not include anything you have appended since. Copy
+   values from `get_equity_orders` as returned rather than retyping them. Each
+   line is:
    `{"order_id","symbol","side","quantity","average_price","filled_at"}`
    — plus `"pnl_pct"` on a sell, computed against the entry price from the
    journal, and an optional short `"note"`. Append only; never rewrite or

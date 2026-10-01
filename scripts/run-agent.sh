@@ -58,7 +58,12 @@ if (( ! open )); then
 fi
 
 LOG="logs/run-$(TZ=America/New_York date +%F).log"
+run_start=$(date +%s)
+rc=0
 
+# `|| true` on the group: if the log itself cannot be opened (disk or inodes
+# exhausted), bash skips the whole group and set -e would end the script here,
+# before the health check below -- the one thing that run most needs.
 {
   echo "===== run started $(date -u +%FT%TZ) ====="
   # Model is pinned, not left to the CLI default. The earlier estimate here
@@ -166,7 +171,6 @@ LOG="logs/run-$(TZ=America/New_York date +%F).log"
   # `|| rc=$?` rather than a bare call: set -e is on, so an agent crash or a
   # non-zero exit would otherwise abort the script here and skip the fill drain
   # below -- exactly the run where a recorded fill most needs reporting.
-  rc=0
   claude -p "$(cat prompts/trading-run.md)" \
     --output-format text \
     --model claude-haiku-4-5 \
@@ -185,4 +189,51 @@ LOG="logs/run-$(TZ=America/New_York date +%F).log"
   python3 hooks/notify.py fills || true
 
   echo "===== run finished $(date -u +%FT%TZ) rc=$rc ====="
-} >> "$LOG" 2>&1
+} >> "$LOG" 2>&1 || true
+
+# Run health alert. From 2026-09-09 to 09-23 every run failed to reach
+# Robinhood -- disk full, then a dead OAuth token -- and nobody knew for
+# fourteen trading days. Runs from 09-17 on even exited rc=0, the agent
+# politely reporting that it had no MCP tools, and the 09-10..09-16 logs are
+# empty because the disk was full. Neither exit code nor log content is a
+# trustworthy signal, so this asks the direct question: did this run get a
+# real answer from Robinhood?
+#
+# The evidence is state/.rh-heartbeat, touched by a PostToolUse hook in
+# .claude/settings.json whenever get_portfolio returns a payload containing
+# total_value. Every run calls get_portfolio in step 2, so a heartbeat older
+# than this run means the run never saw the account, whatever the cause.
+#
+# Throttled through state/.run-health so an outage is one alert, not seven a
+# day: alert on the first failed run, repeat at most every 6 hours (in effect,
+# once each morning while it lasts), and send one "recovered" alert when a run
+# succeeds again. Kept outside the logged group and fully best-effort -- it
+# must work on a full disk, and must never fail the run.
+reached=0
+hb=$(stat -c %Y state/.rh-heartbeat 2>/dev/null || echo 0)
+(( hb >= run_start )) && reached=1
+prev=$(cat state/.run-health 2>/dev/null || true)
+now=$(date +%s)
+et=$(TZ=America/New_York date '+%a %H:%M ET')
+if (( rc == 0 && reached )); then
+  if [[ $prev == fail* ]]; then
+    python3 hooks/notify.py alert "Trading agent recovered" \
+      "The ${et} run reached Robinhood normally." || true
+  fi
+  echo ok > state/.run-health 2>/dev/null || true
+else
+  last_alert=0
+  [[ $prev == fail* ]] && last_alert=${prev#fail }
+  [[ $last_alert =~ ^[0-9]+$ ]] || last_alert=0
+  if (( now - last_alert >= 6 * 3600 )); then
+    why="did not get account data from Robinhood"
+    (( rc != 0 )) && why="exited with rc=${rc}"
+    free=$(df -h --output=avail "$REPO_DIR" 2>/dev/null | tail -1 | tr -d ' ')
+    tail_txt=$(tail -n 4 "$LOG" 2>/dev/null | grep -v '^=====' | cut -c1-160 || true)
+    python3 hooks/notify.py alert "Trading agent run FAILED" \
+      "The ${et} run ${why}. Positions are unmanaged until this is fixed. Disk free: ${free:-?}.
+${tail_txt:-(no log output)}
+See ${LOG}." || true
+    echo "fail $now" > state/.run-health 2>/dev/null || true
+  fi
+fi

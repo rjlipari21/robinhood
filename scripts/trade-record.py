@@ -24,7 +24,9 @@ Runs after every agent run (run-agent.sh, after reconcile-fills.py). Two jobs:
 
 Entry signals (path, hourly RSI, relative volume, breakout level) and the exit
 reason come from fields the agent writes on its fills.jsonl lines (step 9 of
-the run prompt). Older lines predate those fields, so exit_reason is inferred
+the run prompt). `model` is the Claude model the trading run was pinned to
+when the trade opened: MODEL_HISTORY below (from git history) plus any later
+changes run-agent.sh appends to state/model-history.jsonl. Older lines predate those fields, so exit_reason is inferred
 from the note text and marked `exit_reason_source: inferred`.
 
 Failure is soft: one line, non-zero exit; the run is unaffected. If the
@@ -44,8 +46,16 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 FILLS = os.path.join(ROOT, "state", "fills.jsonl")
 CONTEXT = os.path.join(ROOT, "state", "trade-context.json")
 TRADES = os.path.join(ROOT, "state", "trades.jsonl")
+MODELS = os.path.join(ROOT, "state", "model-history.jsonl")
 CONTEXT_SINCE = "2026-10-01"   # first day the agent records entry context
 MAX_CAPTURE_AGE_H = 24         # past this, ratings no longer describe entry
+# Model pins before run-agent.sh logged them, dated by the commit that set each
+# (34d4c14, d398da8). Before the first pin the CLI default was used.
+MODEL_HISTORY = [
+    ("1970-01-01T00:00:00Z", "cli-default"),
+    ("2026-08-25T01:06:01Z", "claude-sonnet-5"),
+    ("2026-09-01T19:51:03Z", "claude-haiku-4-5"),
+]
 
 _spec = importlib.util.spec_from_file_location(
     "market_regime", os.path.join(ROOT, "scripts", "market-regime.py"))
@@ -102,6 +112,34 @@ def load_context():
             return json.load(fh)
     except (OSError, json.JSONDecodeError):
         return {}
+
+
+def load_models():
+    """[(since, model)] oldest first: the seed plus run-agent.sh's log."""
+    hist = list(MODEL_HISTORY)
+    try:
+        with open(MODELS) as fh:
+            for line in fh:
+                try:
+                    d = json.loads(line)
+                    hist.append((str(d["since"]), str(d["model"])))
+                except (json.JSONDecodeError, KeyError, TypeError):
+                    continue
+    except FileNotFoundError:
+        pass
+    return sorted(hist)
+
+
+def model_at(ts, hist):
+    t = parse_ts(ts)
+    if not t:
+        return "unknown"
+    out = "unknown"
+    for since, model in hist:
+        s = parse_ts(since)
+        if s and s <= t:
+            out = model
+    return out
 
 
 def save_json(path, obj):
@@ -184,7 +222,7 @@ def exit_reason(fill):
     return "unknown", "inferred"
 
 
-def build(fills, context):
+def build(fills, context, models):
     lots = defaultdict(deque)       # symbol -> open trades, oldest first
     trades = []
 
@@ -195,6 +233,7 @@ def build(fills, context):
             "symbol": b.get("symbol"),
             "status": "open",
             "entry_path": b.get("entry_path") or ("unknown" if not orphan else "pre-agent"),
+            "model": "pre-agent" if orphan else model_at(ts, models),
             "opened_at": ts,
             "entry_price": price,
             "qty": qty,
@@ -268,7 +307,7 @@ def main():
             note = f", captured entry context for {n} new buy(s)"
     except FetchFailed as exc:
         note = f", context capture FAILED ({exc}) -- retried next run"
-    trades = build(fills, context)
+    trades = build(fills, context, load_models())
     tmp = TRADES + ".tmp"
     with open(tmp, "w") as fh:
         fh.write("".join(json.dumps(t, separators=(",", ":")) + "\n" for t in trades))

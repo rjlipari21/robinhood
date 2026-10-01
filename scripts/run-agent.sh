@@ -58,6 +58,7 @@ if (( ! open )); then
 fi
 
 LOG="logs/run-$(TZ=America/New_York date +%F).log"
+MODEL=claude-haiku-4-5   # see the pinning notes above the claude call
 run_start=$(date +%s)
 rc=0
 
@@ -171,9 +172,16 @@ rc=0
   # `|| rc=$?` rather than a bare call: set -e is on, so an agent crash or a
   # non-zero exit would otherwise abort the script here and skip the fill drain
   # below -- exactly the run where a recorded fill most needs reporting.
+  #
+  # Record the model whenever it changes, so scripts/trade-record.py can tag
+  # each trade with the model that opened it and the weekly review can split
+  # results by model. One line per change, not per run.
+  if [[ "$(tail -n 1 state/model-history.jsonl 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["model"])' 2>/dev/null)" != "$MODEL" ]]; then
+    printf '{"since":"%s","model":"%s"}\n' "$(date -u +%FT%TZ)" "$MODEL" >> state/model-history.jsonl || true
+  fi
   claude -p "$(cat prompts/trading-run.md)" \
     --output-format text \
-    --model claude-haiku-4-5 \
+    --model "$MODEL" \
     --effort medium \
     --max-turns 60 || rc=$?
 

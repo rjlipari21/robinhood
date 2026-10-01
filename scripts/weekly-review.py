@@ -10,7 +10,8 @@ Runs Fridays after the close (rh-weekly-review@.timer, installed by
 scripts/install-weekly-review.sh) and can be run by hand any time. It:
 
   * splits closed trades by entry path, exit reason, analyst consensus and
-    upside at entry, SPY's position at entry, and position size;
+    upside at entry, SPY's position at entry, position size, and the Claude
+    model that opened the trade;
   * reports each split over three windows -- the last 7 days, since the
     2026-10-01 rule changes, and all time -- because the rules changed a lot
     that day and mixing eras hides whether the new rules work;
@@ -110,6 +111,10 @@ def seg_size(t):
     return "<= $150" if n <= 150 else "> $150 (pre-cap)"
 
 
+def seg_model(t):
+    return t.get("model") or "unknown"
+
+
 SEGMENTS = [
     ("Entry path", seg_path),
     ("Exit reason", seg_exit),
@@ -117,6 +122,7 @@ SEGMENTS = [
     ("Analyst target vs entry price", seg_upside),
     ("Market at entry", seg_spy),
     ("Position size", seg_size),
+    ("Model", seg_model),
 ]
 
 
@@ -155,7 +161,7 @@ HEADER = ("| | Trades | Win rate | Avg win | Avg loss | Per trade | Avg % | Tota
           "|---|---|---|---|---|---|---|---|")
 
 
-UNLABELLED = {"unknown", "not recorded", "pre-agent"}
+UNLABELLED = {"unknown", "not recorded", "pre-agent", "cli-default"}
 
 
 def flags(trades, label):

@@ -229,6 +229,9 @@ committed scripts already does.
    journal, and an optional short `"note"`. Append only; never rewrite or
    reorder existing lines, and never re-add an order_id already present.
    Dedupe and delivery are handled downstream, so a line here is enough.
+   After you exit, `scripts/reconcile-fills.py` adds any fill you missed,
+   marked as missed. That is a backstop, not a substitute: its lines carry no
+   reasoning and only an approximate P/L, and each one is counted against you.
 10. Append a complete journal entry to `state/journal.md` (date/time ET,
    positions with entry prices, orders placed with ref_ids and fill status,
    observations, watch items for next run). Do this even if you placed no

@@ -186,6 +186,11 @@ rc=0
   #
   # `|| true` because an alerting failure must never fail a trading run --
   # notify.py already exits 0 on every internal error, this covers the rest.
+  #
+  # reconcile-fills.py first: it asks Robinhood which orders actually traded
+  # and appends any the agent failed to record, so a missed step 9 still
+  # reaches the phone. The ABNB sell on 2026-09-03 never did.
+  python3 scripts/reconcile-fills.py || true
   python3 hooks/notify.py fills || true
 
   echo "===== run finished $(date -u +%FT%TZ) rc=$rc ====="

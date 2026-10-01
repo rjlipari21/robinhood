@@ -281,8 +281,11 @@ file to the owner's phone after you exit, deduped by `order_id`, so appending a
 line is all you do — never send anything yourself, and never re-add an
 order_id that is already in the file.
 
-If you skip that append, the owner gets no alert that a trade actually
-happened. A placed order is not a trade; the fill is. Keep writing fills into
+If you skip that append, the owner's alert arrives late and thin:
+`scripts/reconcile-fills.py` runs after you exit, asks Robinhood which orders
+traded, and appends any you missed, marked as missed, with no reasoning and
+only an approximate P/L. Do not lean on it. A placed order is not a trade;
+the fill is. Keep writing fills into
 `state/journal.md` as well — the journal is the durable narrative, while
 `fills.jsonl` is only the alert queue.
 

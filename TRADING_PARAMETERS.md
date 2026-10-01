@@ -65,12 +65,17 @@ another reason. Closing this needs a third saved scan on the Path B band.
 
 ## Position sizing & limits
 - Account risk capital: full account (~$1,000 starting).
-- Max 50% of account value in any single stock (~$500 per name at current
-  size). With the cash floor below, that means at most 2 max-size
-  positions; smaller sizes may be used to hold more names concurrently
-  (up to 9). Sizing is a ceiling, not a target — take a full 50% only on
-  a high-conviction setup, and prefer smaller when the signal is weak or
-  the spread is wide.
+- Max **$150 in any single stock** (~15% of account value), counting the
+  whole position, not just one order. Enforced in code: `config/limits.json`
+  `max_position_usd` = 150, so the guardrail rejects any single buy over
+  $150; the agent keeps the total position under it. Stocks priced above
+  $150 a share are therefore out of reach. Sizing is a ceiling, not a target
+  — prefer smaller when the signal is weak or the spread is wide.
+  Lowered from 50% / ~$500 by owner instruction on 2026-10-01. Over the first
+  30 closed trades the large positions were the big losers — RVMD (~$415,
+  −$35), APLD (~$273, −$14), MGM (~$171, −$9), CCJ (~$300, −$7) — while most
+  winners were $8–$30 positions. Until the strategy has a track record,
+  no single name should be able to cost more than ~$8 at the −5% exit.
 - Keep ≥10% of account value in cash at all times.
 - Max 50 trades (placed orders) per day.
 - Cash-account discipline: buy only with settled funds (avoid good-faith
@@ -111,7 +116,7 @@ Trend state:
               this is the only macro state that blocks a new entry.
 
 Rung size = 1/3 of the name's intended full position (so 3 rungs reach the
-target; the 50%-of-account cap is the ceiling on the FULL position, not on
+target; the $150 per-name cap is the ceiling on the FULL position, not on
 a rung). Never hold more than 3 rungs in one name.
 
 ### Laddering IN — two independent entry paths (either one opens rung 1)

@@ -18,7 +18,7 @@ bypass — a rejected order never reaches Robinhood. A rejection means the cap
 is real: do not retry it, do not reshape the order to get around it.
 
 **Hard-enforced (hook):** account number, limit orders only, allowed sessions,
-$500 per-position cap, 50 buys/day, the `state/HALT` kill switch.
+$150 per-order buy cap, 50 buys/day, the `state/HALT` kill switch.
 
 **Yours to enforce (the hook cannot see account state):** the 9-position
 ceiling, the ≥10% cash reserve, the $850 circuit breaker, settled-funds
@@ -47,11 +47,13 @@ Verify these against Robinhood each run — never against the journal alone.
 
 ## Position sizing
 
-- Max **$500 per name** (50% of a ~$1,000 account) — hook-enforced. For a
-  limit order the hook computes `quantity × limit_price`, so size the
-  quantity accordingly. This is a ceiling, not a target: a full $500 is two
-  names' worth of the account, so take it only on the highest-conviction
-  setups and expect to hold far smaller positions most of the time.
+- Max **$150 per name** (~15% of a ~$1,000 account). The hook rejects any
+  buy where `quantity × limit_price` exceeds $150. The hook checks each order
+  separately, so keeping the *whole* position (including any averaging-down
+  add) at or under $150 is up to you. A stock trading above $150 a share
+  cannot be bought at all — skip it rather than trying to fit it. Lowered
+  from $500 on 2026-10-01: the largest positions were the ones that lost
+  most (RVMD, CCJ, MGM). See `TRADING_PARAMETERS.md`.
 - Max **9 concurrent positions**. One position per ticker.
 - Keep **≥10% of account value in cash** at all times. Check `get_portfolio`
   before every buy — if the buy would breach the reserve, skip it.
@@ -80,7 +82,7 @@ Screens you must apply yourself, because the hook cannot see them:
 - **Price ≥ $5.** The hook rejects a buy whose `limit_price` is under $5, but
   do not rely on that as your screen — check the quote first.
 - **Liquid enough to fill cleanly** at your intended size. Check average
-  volume and the `get_equity_price_book` depth before committing; a $500
+  volume and the `get_equity_price_book` depth before committing; a $150
   limit order in a thin name can sit unfilled or fill badly.
 - No options, no crypto, no margin.
 

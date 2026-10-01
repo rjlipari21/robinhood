@@ -27,6 +27,8 @@ committed scripts already does.
      watching for)
    - the tail of `state/ledger.json` (recently executed orders)
    - the `order_id`s already in `state/fills.jsonl` — never re-add these
+   - the market filter: a `MARKET:` line saying BUYS-OK or NO-NEW-BUYS (see
+     step 3)
    - six fresh UUIDs. **Use these for `ref_id`; do not generate your own.**
      Each one at most once per run.
 
@@ -36,6 +38,15 @@ committed scripts already does.
    journal if they disagree.
 3. Check the circuit breaker: if total account value is below $850, open no
    new positions this run. Manage exits only and say so in the journal.
+
+   Then the market filter from step 1. If it says **NO-NEW-BUYS** (SPY below
+   its 20-day average, or down 1% or more today), open no new positions this
+   run: do steps 4, 5, 9 and 10 as normal and skip 6–8 for buys. Do not
+   re-derive SPY's numbers or argue with the verdict. Exits are never gated.
+   If it says **CHECK FAILED**, call `get_equity_quotes` and
+   `get_equity_historicals` (daily, about 45 days) for SPY yourself and apply
+   the same rule, ignoring bars marked `interpolated`. If that fails too, open
+   no new positions. Record the verdict line in the journal either way.
 4. Manage existing positions FIRST. For each holding, compare against entry:
    - down ≥5% → protective exit, limit sell now
    - up +3–5%, or hourly RSI ≥ 65 while up at least +2%, or at the upper

@@ -202,6 +202,18 @@ is the lever, not restoring the cadence.
   positions, notify the owner, and wait for instructions.
 - Any order rejection, unexpected balance, or tool failure: halt trading
   for that run and notify.
+- **Market filter** (owner instruction, 2026-10-01): no new positions while
+  SPY is below its 20-day average close, or is down 1% or more on the day.
+  Gates entries only; exits are never blocked. Computed VM-side each run by
+  `scripts/market-regime.py` (via `scripts/run-context.sh`). If that fails,
+  the agent applies the same rule from SPY quotes and daily bars itself, and
+  if it cannot, it opens nothing that run.
+  Checked against SPY daily closes before adoption: it would have blocked the
+  2026-08-31 to 09-02 entries, which netted about −$36 (mostly RVMD, whose
+  loss the 09-09 outage deepened). It would not have blocked the MGM and
+  MICC losses on 09-25, a selloff in smaller names while SPY was above its
+  average. It blocked 14 of 43 sessions from 07-30 to 09-29 while SPY moved
+  sideways. A small sample: re-judge it after a few more weeks of trades.
 
 ## News & catalyst screen
 - Added 2026-09-01 on owner instruction. Before any buy, and before selling a

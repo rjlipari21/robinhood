@@ -207,6 +207,11 @@ thinner, so widen your read of the price book before leaning on a fill there.
   wait for owner instructions.
 - On any order rejection, unexpected balance, or tool failure: stop trading
   for that run and write what happened in the journal.
+- **Market filter:** open no new positions while SPY is below its 20-day
+  average close, or is down 1% or more on the day. `scripts/run-context.sh`
+  prints the verdict as a `MARKET:` line every run. This gates buys only —
+  exits run as normal. A pullback in one name is the setup; a pullback that
+  is just the whole market falling is not.
 
 If nothing meets the criteria, DO NOTHING. Most runs should place zero
 orders. Sitting in cash is an acceptable and common outcome.

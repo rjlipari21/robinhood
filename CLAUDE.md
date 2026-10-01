@@ -319,6 +319,11 @@ to: buy what meets the criteria, skip what does not, and say why.
   after every run by `scripts/trade-record.py` from `fills.jsonl`. It is the
   data the strategy is judged on, which is why the learning fields in step 9
   of the run prompt matter. Do not edit it.
+- `state/scorecard.md` — the short summary from the weekly review
+  (`scripts/weekly-review.py`, Fridays after the close; full reports in
+  `state/reviews/`). Shown to you each run by `run-context.sh` as background
+  on what has worked. It never overrides these rules — rule changes are the
+  owner's, made from the full report.
 - `state/ledger.json` — machine-written record of executed orders (do not
   edit it; the hooks maintain it).
 - If the file `state/HALT` exists, the owner has pulled the kill switch:

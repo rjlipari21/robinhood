@@ -29,6 +29,9 @@ committed scripts already does.
    - the `order_id`s already in `state/fills.jsonl` — never re-add these
    - the market filter: a `MARKET:` line saying BUYS-OK or NO-NEW-BUYS (see
      step 3)
+   - the scorecard from the latest weekly review: how each entry path and
+     exit has done so far. Background only — it never overrides a rule, and
+     a segment marked "too few to judge" tells you nothing yet
    - six fresh UUIDs. **Use these for `ref_id`; do not generate your own.**
      Each one at most once per run.
 

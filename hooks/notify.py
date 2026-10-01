@@ -298,6 +298,16 @@ def main():
         send(url, token, title, body, tags="warning", priority="high")
         sys.exit(0)
 
+    # summary mode: notify.py summary "<title>" "<body>"
+    #
+    # Routine reports (scripts/weekly-review.py). Default priority, not high:
+    # a weekly scorecard should not ring like an outage does.
+    if len(sys.argv) > 1 and sys.argv[1] == "summary":
+        title = sys.argv[2] if len(sys.argv) > 2 else "Trading summary"
+        body = sys.argv[3] if len(sys.argv) > 3 else ""
+        send(url, token, title, body, tags="bar_chart")
+        sys.exit(0)
+
     try:
         payload = json.load(sys.stdin)
     except (json.JSONDecodeError, ValueError):

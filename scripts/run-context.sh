@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Steps 1-2 of a run in a single call: kill switch, journal tail, ledger tail,
-# the SPY market filter, and a batch of ref_id UUIDs.
+# the SPY market filter, the weekly scorecard, and a batch of ref_id UUIDs.
 #
 # Exists to be allowlistable. The agent used to open a run with an ad-hoc
 # compound command (echo && ls && tail ...), which cannot be matched by a
@@ -68,6 +68,10 @@ echo "=== market filter (gates new buys only; see TRADING_PARAMETERS.md) ==="
 # file. The script prints its own one-line failure, so `|| true` only keeps a
 # failed check from aborting the rest of the context.
 python3 scripts/market-regime.py || true
+
+echo
+echo "=== scorecard (weekly review; background only, never overrides the rules) ==="
+cat state/scorecard.md 2>/dev/null || echo "(no weekly review yet)"
 
 echo
 echo "=== fresh ref_id UUIDs (use each at most once this run) ==="

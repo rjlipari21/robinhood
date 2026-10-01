@@ -47,6 +47,7 @@
       "Read(//home/rjlipari21/.ssh/**)",
       "Read(//home/rjlipari21/.claude/.credentials.json)",
       "Read(//home/rjlipari21/.claude.json)",
+      "Read(//home/rjlipari21/.config/gh/**)",
       "Read(//home/rjlipari21/robinhood/.env)"
     ]
   },
